@@ -5,6 +5,8 @@
 //! sprite evaluation at dot 257, sprite-0 hit detection, the odd-frame dot
 //! skip, and the $2006/$2007 VRAM port including its read buffer.
 
+use alloc::vec::Vec;
+
 use crate::cart::{Cart, Mirroring};
 
 /// The 2C02 palette, in the RGB values Mednafen's NES core uses by default.

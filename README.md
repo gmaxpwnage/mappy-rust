@@ -4,7 +4,7 @@
 
 The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
 code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
-plays the game natively on Linux, macOS and Windows.
+plays the game natively on Linux, macOS, Windows and LG webOS TVs.
 
 * **`crates/mappy-rom`** is the game: every 6502 instruction in the ROM,
   translated to a Rust function (16 384 of them), calling into a Rust model of
@@ -18,6 +18,9 @@ plays the game natively on Linux, macOS and Windows.
 * **`crates/decompiler`** performs the translation: it analyses the ROM,
   annotates it, writes the annotated disassembly (`disassembly/mappy.asm`) and
   generates the Rust source.
+* **`crates/mappy-native`** exposes the same engine as a `no_std` C library, so
+  the LG webOS TV build is a native ARM binary driven by SDL2 — not the browser
+  build.
 
 ```
                  rom/mappy.nes
@@ -45,10 +48,62 @@ there are on-screen buttons for touch devices.
 The wasm build is byte-for-byte the same game logic as the native one: after
 150 frames its framebuffer is pixel-identical to `mappy headless`'s.
 
+## Play on an LG webOS TV
+
+The TV release is a **native ARM** application, not the WebAssembly page:
+`crates/mappy-native` is the decompiled engine compiled as a `no_std` static
+library, and `webos/main.c` is a small SDL2 frontend that owns the window, the
+PulseAudio stream and the 60.0988 fps clock. `tools/build_webos.py` cross-compiles
+both against the unofficial webOS NDK and writes a standard IPK.
+
+### Install from the Homebrew Channel
+
+On the TV, open the Homebrew Channel → **Settings → Repositories → Add
+repository** and enter:
+
+    https://gmaxpwnage.github.io/mappy-rust/webos/apps.json
+
+The channel then lists **Mappy** and installs
+`com.gmaxpwnage.mappy_<version>_arm.ipk`. The same IPK is on the releases page
+for webOS Dev Manager or `ares-install`.
+
+### Magic Remote
+
+| Remote | Game |
+| --- | --- |
+| Left / Right | move |
+| OK (centre button) | A — jump |
+| Up | Start |
+| Down | unbound |
+| B | unbound (the game does not use it) |
+| Back | exits the app (left to webOS) |
+
+The game starts on its own title screen; press **Up** (Start) to begin.
+
+### Build the IPK
+
+```sh
+rustup target add armv7-unknown-linux-gnueabi
+# fetch the NDK once: https://github.com/openlgtv/buildroot-nc4 (2026.08-webos)
+python3 tools/build_webos.py --sdk ~/webos-sdk \
+    --out dist/webos --selftest
+```
+
+`--selftest` builds a headless ARM test and, when `QEMU_ARM=qemu-arm` is set,
+runs 600 frames under qemu and compares the video/audio hash with the x86_64
+reference. On NixOS the Rust toolchain and the NDK's host binaries need an FHS
+environment; run the same command through `steam-run`, as described in the
+NixOS note below.
+
+The IPK is tested on webOS 6.5.3 (ARMv7, ~1 GHz): it holds 60.0 fps with the
+engine at ~11 ms and presentation at ~5 ms per frame. webOS 4.0 or newer is
+required (the app uses SDL2, which the TV provides).
+
 ## Download
 
 Prebuilt binaries are on the [releases page](https://github.com/gmaxpwnage/mappy-rust/releases):
-Linux (x86_64, aarch64), macOS (Apple silicon, Intel) and Windows x86_64.
+Linux (x86_64, aarch64), macOS (Apple silicon, Intel), Windows x86_64, and the
+LG webOS TV IPK (`com.gmaxpwnage.mappy_<version>_arm.ipk`).
 Each archive holds the game (`mappy`), the decompiler and the licence files;
 `SHA256SUMS.txt` covers every archive. The game needs no ROM file — the
 cartridge data is compiled in.
@@ -313,6 +368,12 @@ about **850–900 frames per second** (~15× real time) on one core, including
 full PPU rendering and APU synthesis. `headless`, `trace`, `diff` and `bench`
 are deliberately unthrottled so analysis runs as fast as possible.
 
+On the LG webOS TV build the same lock runs inside SDL2: on the tested webOS
+6.5.3 set (ARMv7, ~1 GHz) the engine costs ~11 ms and presentation ~5 ms per
+frame, so the game holds **60.0 fps**. The ARM engine's 600-frame video/audio
+hash is identical to the x86_64 build's; CI builds it, runs it under qemu and
+fails on any difference.
+
 ## Layout
 
 ```
@@ -322,13 +383,15 @@ crates/decompiler/   ROM analysis, listing writer, Rust code generator
 crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
 crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
 crates/mappy-web/    WebAssembly build: C ABI export surface, no bindgen
+crates/mappy-native/ no_std C ABI used by the native webOS TV build
 web/                 the browser frontend served by GitHub Pages
+webos/               native SDL2 frontend, appinfo, icons, IPK inputs
 demo/mappy-music.wav  the soundtrack as rendered by this project
 screenshots/           title, READY and gameplay frames (identical to the reference)
 disassembly/mappy.asm  annotated disassembly (6.4 k lines)
 symbols.txt            names for the routines that have been identified
 docs/DECOMPILATION.md  what the original program does, routine by routine
-tools/                 opcode table generator, reference-emulator comparisons, test fetch
+tools/                 opcode generator, emulator comparisons, webOS IPK builder, test fetch
 ```
 
 ## Regenerating the decompilation
@@ -361,7 +424,10 @@ trace step exists.
 `mos6502`, `nes`, `mappy-rom` and `decompiler` contain no platform-specific
 code: no threads, no I/O, no graphics APIs. Only `mappy-player` touches the
 outside world, through `winit` (window + keyboard, X11/Wayland/macOS/Windows)
-and `cpal` (audio, optional feature). A headless build is one command:
+and `cpal` (audio, optional feature). The webOS TV build takes the same engine
+through `crates/mappy-native` (no libstd, no allocator dependency of its own)
+and `webos/main.c` (SDL2 video/input, PulseAudio via SDL). A headless build is
+one command:
 
 ```sh
 cargo run --release -p mappy-player --no-default-features -- headless

@@ -11,6 +11,12 @@
 //! The decompiled program drives the NES hardware model in the `nes` crate;
 //! it can therefore run on any platform that crate supports.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::vec::Vec;
+
 use nes::{Cart, Machine};
 
 pub mod generated;

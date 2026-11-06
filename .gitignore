@@ -12,3 +12,6 @@ __pycache__/
 /dist
 # wasm build output copied into web/ for local testing
 /web/mappy.wasm
+
+# webOS NDK cache used by the workflows
+/.webos-sdk

@@ -6,5 +6,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mos6502 = { path = "../mos6502" }
-nes = { path = "../nes" }
+mos6502 = { path = "../mos6502", default-features = false }
+nes = { path = "../nes", default-features = false }
+
+[features]
+default = ["std"]
+std = ["nes/std", "mos6502/std"]

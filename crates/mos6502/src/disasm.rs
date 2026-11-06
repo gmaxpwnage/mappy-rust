@@ -1,5 +1,8 @@
 //! A 6502 disassembler, used by the decompiler and its listings.
 
+use alloc::format;
+use alloc::string::{String, ToString};
+
 use crate::opcodes::{Mode, Op, OPCODES};
 
 /// A decoded instruction.

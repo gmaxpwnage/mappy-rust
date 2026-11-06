@@ -117,9 +117,48 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
+
+  webos:
+    name: build webOS TV package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: webos
+
+      - name: Add the webOS ARM target
+        run: rustup target add armv7-unknown-linux-gnueabi
+
+      - name: Install qemu (runs the ARM engine selftest)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user-static
+
+      - uses: ./.github/actions/webos-sdk
+
+      - name: Build the IPK and its Homebrew manifest
+        env:
+          QEMU_ARM: qemu-arm-static
+        run: |
+          python3 tools/build_webos.py \
+            --sdk "$WEBOS_SDK" \
+            --out dist/webos \
+            --base-url https://github.com/gmaxpwnage/mappy-rust/releases/latest/download \
+            --selftest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webos
+          path: dist/webos
+          if-no-files-found: error
+
   release:
     name: publish release
-    needs: build
+    needs: [build, webos]
     # Only a tag push publishes; workflow_dispatch is a build smoke test.
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -134,21 +173,24 @@ jobs:
       - name: Checksums
         run: |
           cd dist
-          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+          sha256sum *.tar.gz *.zip *.ipk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Check that every platform produced an archive
         run: |
           set -euo pipefail
-          total=$(ls dist/*.tar.gz dist/*.zip 2>/dev/null | wc -l)
-          echo "$total archives"
-          [ "$total" -ge 5 ] || { echo "expected 5 archives, got $total"; exit 1; }
+          total=$(ls dist/*.tar.gz dist/*.zip dist/*.ipk 2>/dev/null | wc -l)
+          echo "$total artifacts"
+          [ "$total" -ge 6 ] || { echo "expected 6 artifacts, got $total"; exit 1; }
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.tar.gz
             dist/*.zip
+            dist/*.ipk
+            dist/manifest.json
+            dist/icon320.png
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true
           body_path: docs/RELEASE_NOTES.md

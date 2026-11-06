@@ -13,6 +13,7 @@ loop, no interpreter — the game's own code is compiled Rust.
 | macOS (Apple silicon) | `mappy-*-macos-arm64.zip` |
 | macOS (Intel) | `mappy-*-macos-x86_64.tar.gz` |
 | Windows x86_64 | `mappy-*-windows-x86_64.zip` |
+| LG webOS TV | `com.gmaxpwnage.mappy_*_arm.ipk` |
 
 Each archive contains:
 
@@ -23,6 +24,8 @@ Each archive contains:
 * README, NOTICE and the two licence files.
 
 Every archive unpacks into a single `mappy-<version>-<platform>/` directory.
+The webOS package is the native ARM IPK (no archives); `manifest.json` and
+`icon320.png` are the Homebrew Channel metadata that go with it.
 Verify with `sha256sum -c SHA256SUMS.txt`.
 
 ## Running it
@@ -49,6 +52,36 @@ a reference emulator.
 Useful flags: `--scale N` (window size), `--no-audio`, `--fps N`,
 `--record out.wav` (captures exactly what is played), `--stats` (prints the
 measured frame rate once a second).
+
+## LG webOS TV
+
+The TV build is a **native ARM application**, not the WebAssembly page: the
+decompiled engine is compiled as a `no_std` static library and driven by a small
+SDL2 frontend, then packaged as a standard IPK.
+
+Install it from the **Homebrew Channel**: Settings → Repositories → Add
+repository, and enter
+
+    https://gmaxpwnage.github.io/mappy-rust/webos/apps.json
+
+Mappy then appears in the channel and installs
+`com.gmaxpwnage.mappy_<version>_arm.ipk`. The IPK can also be installed with
+webOS Dev Manager or `ares-install`. webOS 4.0 or newer is required.
+
+Magic Remote mapping:
+
+| Remote | Game |
+| --- | --- |
+| Left / Right | move |
+| OK (centre) | A — jump |
+| Up | Start |
+| Down | unbound |
+| B | unbound (the game does not use it) |
+| Back | exits the app (left to webOS) |
+
+Press **Up** on the title screen to start. The game is paced at 60.0988 fps;
+on the tested webOS 6.5.3 TV the engine takes ~11 ms and presentation ~5 ms per
+frame, so it holds 60 fps.
 
 ## Platform notes
 
@@ -77,6 +110,9 @@ measured frame rate once a second).
   exactly, note lengths and rests align to within one frame.
 * **It runs at ~850 fps** (14× real time) on one core, including full PPU and
   APU work, while the game itself is paced to 60.
+* **The ARM build is the same game**: the native engine in the webOS IPK
+  produces the identical 600-frame video/audio hash on ARM as on x86_64
+  (checked under qemu in CI), and holds 60.0 fps on a webOS 6.5.3 TV.
 
 Full details, the annotated disassembly and the reverse-engineering notes are in
 the repository: <https://github.com/gmaxpwnage/mappy-rust>

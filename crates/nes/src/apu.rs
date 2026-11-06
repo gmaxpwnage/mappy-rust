@@ -13,6 +13,8 @@
 //! * the DMC timer runs at the CPU clock;
 //! * the frame sequencer is a 240 Hz (7457 CPU cycle) four-step machine.
 
+use alloc::vec::Vec;
+
 /// Tone frequency of a pulse channel for timer period `t`.
 #[inline]
 pub fn pulse_frequency(t: u16) -> f64 {
@@ -835,7 +837,7 @@ impl Apu {
 
     /// Drain buffered audio samples (`-1.0..=1.0`).
     pub fn drain_samples(&mut self) -> Vec<f32> {
-        std::mem::take(&mut self.samples)
+        core::mem::take(&mut self.samples)
     }
 }
 

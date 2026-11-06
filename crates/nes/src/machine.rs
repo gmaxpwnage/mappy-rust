@@ -5,6 +5,8 @@
 //! [`Machine::write_byte`] and touches `machine.cpu.*` directly, exactly like
 //! the original 6502 code touched memory-mapped registers.
 
+use alloc::vec::Vec;
+
 use crate::apu::Apu;
 use crate::cart::Cart;
 use crate::ppu::Ppu;

@@ -10,6 +10,10 @@
 //! The game itself does *not* run through this interpreter; it runs through
 //! machine code that `decompiler` translated to Rust source.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 pub mod disasm;
 pub mod opcodes;
 

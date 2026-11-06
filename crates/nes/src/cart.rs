@@ -1,5 +1,10 @@
 //! iNES cartridge handling.
 
+use alloc::format;
+use alloc::vec;
+use alloc::string::String;
+use alloc::vec::Vec;
+
 /// Nametable mirroring.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mirroring {

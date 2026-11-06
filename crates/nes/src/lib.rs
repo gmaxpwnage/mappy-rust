@@ -9,6 +9,10 @@
 //! same code runs on Linux, macOS, Windows, and (with a software framebuffer)
 //! in a headless test harness.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 pub mod apu;
 pub mod cart;
 pub mod machine;

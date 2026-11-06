@@ -5,9 +5,12 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'webos/**'
       - 'crates/**'
+      - 'tools/build_webos.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.github/actions/webos-sdk/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -22,7 +25,7 @@ concurrency:
 
 jobs:
   build:
-    name: build the WebAssembly site
+    name: build the WebAssembly site and the webOS package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +35,19 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Add the webOS ARM target
+        run: rustup target add armv7-unknown-linux-gnueabi
+
+      - name: Install qemu (runs the ARM engine selftest)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user-static
+
+      - uses: ./.github/actions/webos-sdk
+
+      - id: pages
+        uses: actions/configure-pages@v5
 
       - name: Build the wasm module
         run: cargo build --release --locked --target wasm32-unknown-unknown -p mappy-web
@@ -44,10 +60,18 @@ jobs:
           cp target/wasm32-unknown-unknown/release/mappy_web.wasm site/mappy.wasm
           ls -l site
 
+      - name: Build the native webOS IPK and the Homebrew Channel repository
+        env:
+          QEMU_ARM: qemu-arm-static
+        run: |
+          python3 tools/build_webos.py \
+            --sdk "$WEBOS_SDK" \
+            --out site/webos \
+            --base-url "${{ steps.pages.outputs.base_url }}/webos" \
+            --selftest
+
       - name: Smoke test the module (renders a frame, produces audio)
         run: node web/smoke.js site/mappy.wasm
-
-      - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:

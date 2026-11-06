@@ -1,0 +1,19 @@
+[package]
+name = "mappy-native"
+description = "C ABI static library for native frontends (webOS TV)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+mappy-rom = { path = "../mappy-rom", default-features = false }
+nes = { path = "../nes", default-features = false }
+
+[features]
+default = ["std"]
+# The webOS build passes --no-default-features: the engine then links no libstd
+# and the C frontend provides malloc/free and the panic handler below.
+std = ["mappy-rom/std", "nes/std"]

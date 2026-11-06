@@ -1,0 +1,37 @@
+name: webOS NDK
+description: Fetch and cache the unofficial webOS TV native SDK (buildroot-nc4)
+
+inputs:
+  tag:
+    description: buildroot-nc4 release tag to install
+    required: false
+    default: 2026.08-webos
+
+runs:
+  using: composite
+  steps:
+    - name: Cache the SDK
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.webos-sdk
+        key: webos-ndk-${{ inputs.tag }}
+
+    - name: Download the SDK
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .webos-sdk
+        curl -fL --retry 3 --retry-delay 2 \
+          -o /tmp/webos-ndk.tar.gz \
+          "https://github.com/openlgtv/buildroot-nc4/releases/download/${{ inputs.tag }}/arm-webos-linux-gnueabi_sdk-buildroot-x86_64.tar.gz"
+        tar -xzf /tmp/webos-ndk.tar.gz -C .webos-sdk --strip-components=1
+
+    - name: Relocate and expose the SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        .webos-sdk/relocate-sdk.sh
+        echo "WEBOS_SDK=$GITHUB_WORKSPACE/.webos-sdk" >> "$GITHUB_ENV"
+        "$GITHUB_WORKSPACE/.webos-sdk/bin/arm-webos-linux-gnueabi-gcc" --version | head -1
