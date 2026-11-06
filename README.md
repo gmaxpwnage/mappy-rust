@@ -34,6 +34,14 @@ plays the game natively on Linux, macOS and Windows.
                        └─────────────────────┘  ⟵ runs the actual game
 ```
 
+## Download
+
+Prebuilt binaries are on the [releases page](https://github.com/gmaxpwnage/mappy-rust/releases):
+Linux (x86_64, aarch64), macOS (Apple silicon, Intel) and Windows x86_64.
+Each archive holds the game (`mappy`), the decompiler and the licence files;
+`SHA256SUMS.txt` covers every archive. The game needs no ROM file — the
+cartridge data is compiled in.
+
 ## Run it
 
 ```sh

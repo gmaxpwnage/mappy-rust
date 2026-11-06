@@ -9,3 +9,4 @@
 crates/mos6502/tests/data/*.bin
 __pycache__/
 *.pyc
+/dist
