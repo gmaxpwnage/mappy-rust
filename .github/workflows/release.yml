@@ -21,18 +21,25 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
             archive: tar.gz
           - name: linux-aarch64
             os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
             archive: tar.gz
           - name: macos-arm64
             os: macos-latest
+            target: aarch64-apple-darwin
             archive: zip
+          # Intel macOS is cross-compiled on the arm64 runner: GitHub retired
+          # the macos-13 Intel images, and Apple's toolchain targets both.
           - name: macos-x86_64
-            os: macos-13
+            os: macos-latest
+            target: x86_64-apple-darwin
             archive: tar.gz
           - name: windows-x86_64
             os: windows-latest
+            target: x86_64-pc-windows-msvc
             archive: zip
 
     steps:
@@ -41,6 +48,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
 
       # winit/softbuffer load the window system at runtime (X11 or Wayland);
       # cpal links ALSA, so the dev package is needed to build.
@@ -52,7 +64,7 @@ jobs:
             pkg-config libasound2-dev libx11-dev libxkbcommon-dev libwayland-dev
 
       - name: Build the game and the decompiler
-        run: cargo build --release --locked -p mappy-player -p decompiler
+        run: cargo build --release --locked --target ${{ matrix.target }} -p mappy-player -p decompiler
 
       - name: Assemble the archive (Unix)
         if: runner.os != 'Windows'
@@ -65,8 +77,8 @@ jobs:
           echo "NAME=$name" >> "$GITHUB_ENV"
           mkdir -p "dist/$name"
           cp README.md NOTICE LICENSE-MIT LICENSE-APACHE "dist/$name/"
-          cp target/release/mappy "dist/$name/"
-          cp target/release/decompiler "dist/$name/"
+          cp "target/${{ matrix.target }}/release/mappy" "dist/$name/"
+          cp "target/${{ matrix.target }}/release/decompiler" "dist/$name/"
           chmod +x "dist/$name/mappy" "dist/$name/decompiler"
 
       - name: Assemble the archive (Windows)
@@ -79,8 +91,8 @@ jobs:
           "NAME=$name" | Out-File -FilePath $env:GITHUB_ENV -Append
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item README.md, NOTICE, LICENSE-MIT, LICENSE-APACHE -Destination "dist/$name"
-          Copy-Item target/release/mappy.exe -Destination "dist/$name"
-          Copy-Item target/release/decompiler.exe -Destination "dist/$name"
+          Copy-Item "target/${{ matrix.target }}/release/mappy.exe" -Destination "dist/$name"
+          Copy-Item "target/${{ matrix.target }}/release/decompiler.exe" -Destination "dist/$name"
 
       - name: Create tar.gz
         if: matrix.archive == 'tar.gz'
