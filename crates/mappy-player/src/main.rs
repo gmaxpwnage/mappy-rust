@@ -97,6 +97,8 @@ struct Opts {
     watch_ram: Option<u16>,
     region: Option<(u32, u32, u32, u32)>,
     decompiled: bool,
+    /// Write the final frame's NES palette indices (256x240 bytes).
+    dump_indices: bool,
     /// True when `--rom` was given explicitly.
     rom_given: bool,
     fps: f64,
@@ -121,6 +123,7 @@ impl Opts {
             watch_ram: None,
             region: None,
             decompiled: true,
+            dump_indices: false,
             rom_given: false,
             fps: 60.0988,
             stats: false,
@@ -191,6 +194,10 @@ impl Opts {
                 }
                 "--stats" => {
                     o.stats = true;
+                    i += 1;
+                }
+                "--dump-indices" => {
+                    o.dump_indices = true;
                     i += 1;
                 }
                 "--record" => {
@@ -280,6 +287,21 @@ fn headless(o: &mut Opts) {
             let pc = if decompiled { game.machine.cpu.pc } else { m.cpu.pc };
             println!("frame {f}: pc={pc:04X} -> {path}");
         }
+    }
+    if o.dump_indices {
+        let ppu = if decompiled { &game.machine.ppu } else { &m.ppu };
+        std::fs::write(o.outdir.join("indices.bin"), ppu.pixels).unwrap();
+        std::fs::write(o.outdir.join("nametables.bin"), ppu.nametables).unwrap();
+        std::fs::write(o.outdir.join("palette.bin"), ppu.palette).unwrap();
+        std::fs::write(o.outdir.join("oam.bin"), ppu.oam).unwrap();
+        {
+            let mut log = String::from("frame,scanline,dot,value\n");
+            for (f, sl, dot, v) in &ppu.palette_writes {
+                log.push_str(&format!("{f},{sl},{dot},{v:02X}\n"));
+            }
+            std::fs::write(o.outdir.join("palette_writes.csv"), log).unwrap();
+        }
+        println!("wrote framebuffer indices, nametables, palette RAM and OAM to {:?}", o.outdir);
     }
     let elapsed = started.elapsed().as_secs_f64();
     let total = if decompiled { game.machine.total_cycles } else { m.total_cycles };

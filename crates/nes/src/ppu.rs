@@ -7,24 +7,17 @@
 
 use crate::cart::{Cart, Mirroring};
 
-/// Default 2C02 palette (RGB), index 0-63. Emphasis bits are not modelled.
+/// The 2C02 palette, in the RGB values Mednafen's NES core uses by default.
+///
+/// Taken from the reference emulator's own built-in table and then verified
+/// against its rendered output: every distinct colour in a reference frame
+/// maps to exactly one entry here. Using the same values keeps our screenshots
+/// colour-identical to the reference rather than merely similar.
 pub static NES_PALETTE: [[u8; 3]; 64] = [
-    [124, 124, 124], [0, 0, 252], [0, 0, 188], [68, 40, 188],
-    [148, 0, 132], [168, 0, 32], [168, 16, 0], [136, 20, 0],
-    [80, 48, 0], [0, 120, 0], [0, 104, 0], [0, 88, 0],
-    [0, 64, 88], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-    [188, 188, 188], [0, 120, 248], [0, 88, 248], [104, 68, 252],
-    [216, 0, 204], [228, 0, 88], [248, 56, 0], [228, 92, 16],
-    [172, 124, 0], [0, 184, 0], [0, 168, 0], [0, 168, 68],
-    [0, 136, 136], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-    [248, 248, 248], [60, 188, 252], [104, 136, 252], [152, 120, 248],
-    [248, 120, 248], [248, 88, 152], [248, 120, 88], [252, 160, 68],
-    [248, 184, 0], [184, 248, 24], [88, 216, 84], [88, 248, 152],
-    [0, 232, 216], [120, 120, 120], [0, 0, 0], [0, 0, 0],
-    [252, 252, 252], [164, 228, 252], [184, 184, 248], [216, 184, 248],
-    [248, 184, 248], [248, 164, 192], [240, 208, 176], [252, 224, 168],
-    [248, 216, 120], [216, 248, 120], [184, 248, 184], [184, 248, 216],
-    [0, 252, 252], [248, 216, 248], [0, 0, 0], [0, 0, 0],
+    [116, 116, 116], [36, 24, 140], [0, 0, 168], [68, 0, 156], [140, 0, 116], [168, 0, 16], [164, 0, 0], [124, 8, 0], [64, 44, 0], [0, 68, 0], [0, 80, 0], [0, 60, 20], [24, 60, 92], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+    [188, 188, 188], [0, 112, 236], [32, 56, 236], [128, 0, 240], [188, 0, 188], [228, 0, 88], [216, 40, 0], [200, 76, 12], [136, 112, 0], [0, 148, 0], [0, 168, 0], [0, 144, 56], [0, 128, 136], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+    [252, 252, 252], [60, 188, 252], [92, 148, 252], [64, 136, 252], [244, 120, 252], [252, 116, 180], [252, 116, 96], [252, 152, 56], [240, 188, 60], [128, 208, 16], [76, 220, 72], [88, 248, 152], [0, 232, 216], [120, 120, 120], [0, 0, 0], [0, 0, 0],
+    [252, 252, 252], [168, 228, 252], [196, 212, 252], [212, 200, 252], [252, 196, 252], [252, 196, 216], [252, 188, 176], [252, 216, 168], [252, 228, 160], [224, 252, 160], [168, 240, 188], [176, 252, 204], [156, 252, 240], [196, 196, 196], [0, 0, 0], [0, 0, 0],
 ];
 
 #[derive(Clone, Copy, Default)]
@@ -85,6 +78,8 @@ pub struct Ppu {
 
     /// True when the PPU wants to assert /NMI (edge triggered by the machine).
     pub nmi_out: bool,
+    /// Recent palette-RAM writes with their beam position (diagnostics).
+    pub palette_writes: Vec<(u64, u16, u16, u8)>,
 }
 
 impl Default for Ppu {
@@ -128,6 +123,7 @@ impl Ppu {
             sprites: [SpriteSlot::default(); 8],
             sprite_count: 0,
             nmi_out: false,
+            palette_writes: Vec::new(),
         }
     }
 
@@ -180,6 +176,10 @@ impl Ppu {
             0x3F00..=0x3FFF => {
                 let i = Self::palette_index(addr);
                 self.palette[i] = val & 0x3F;
+                if self.palette_writes.len() < 4096 {
+                    self.palette_writes
+                        .push((self.frame, self.scanline, self.dot, val));
+                }
             }
             _ => {}
         }
@@ -384,7 +384,9 @@ impl Ppu {
         for i in 0..64 {
             let base = i * 4;
             let y = self.oam[base] as i16;
-            let row = next_line as i16 - y;
+            // A sprite's Y register points at the scanline *above* its first
+            // row, so row 0 of a sprite with Y = y is drawn on scanline y + 1.
+            let row = next_line as i16 - y - 1;
             if row < 0 || row >= height as i16 {
                 continue;
             }
@@ -483,7 +485,10 @@ impl Ppu {
                 }
                 let behind = s.attr & 0x20 != 0;
                 if !(behind && bg_opaque) {
-                    let pi = 4 + (s.attr as usize & 0x03) * 4 + pal as usize;
+                    // Sprite palettes live at $3F10-$3F1F, i.e. entries 16-31;
+                    // using 4 + ... here would paint sprites with background
+                    // colours.
+                    let pi = 16 + (s.attr as usize & 0x03) * 4 + pal as usize;
                     let mut c = self.palette[pi] & 0x3F;
                     if self.mask & 0x01 != 0 {
                         c &= 0x30;
@@ -519,7 +524,12 @@ impl Ppu {
 
         // Background pipeline.
         if (visible || pre_render) && rendering {
-            if (2..=257).contains(&self.dot) || (322..=337).contains(&self.dot) {
+            // Fetch/load windows: dots 2-257 for the visible part and 321-337
+            // for the prefetch of the next line. The prefetch starts at dot
+            // 321 (not 322): skipping that dot loses the reload that puts the
+            // first tile of the line into the shifters, leaving the leftmost
+            // 8 pixels blank.
+            if (2..=257).contains(&self.dot) || (321..=337).contains(&self.dot) {
                 self.shift_bg();
                 match (self.dot - 1) % 8 {
                     0 => {

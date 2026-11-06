@@ -153,12 +153,12 @@ commands below.
    mappy diff --frames 500 --input "START@19-21,RIGHT@100-300"   # same, longer
    ```
 
-3. **Hardware model vs a reference emulator** — frames rendered by this project
-   were compared against FCEUX 2.7 with the same palette and the same input
-   (`tools/compare_frames.py`). On the idle title screen only 370 of 57 344
-   pixels differ, all in one 8-pixel row: the "namcot" logo's palette-cycle
-   phase. During gameplay 1.8–2.1 % of pixels differ, which is the animation
-   phase shift caused by FCEUX's one-frame input pipeline.
+3. **Rendering vs a reference emulator** — `tools/compare_mednafen.sh` records
+   Mednafen's video output of the same auto-starting ROM, extracts frames and
+   compares them against ours pixel for pixel: **every compared frame is
+   identical** (title screen, "READY" screen and moving gameplay). The same
+   palette table was validated independently by checking that every colour in
+   the reference's frames exists in ours.
 
 4. **Audio correctness** — `crates/nes/tests/apu_waveform.rs` measures what the
    APU *sounds like*: pulse/triangle tone frequency against the documented
@@ -179,6 +179,37 @@ commands below.
 7. **Game-level smoke test** — `--input "START@19-21"` must produce the
    `PLAYER 1 READY` screen and a live score, i.e. the game really starts,
    which the test asserts through the input-enable byte at `$040F`.
+
+### Video
+
+The PPU is dot-accurate: the background fetch pipeline (including the
+321-337 prefetch window that fills the shifters for the next line), sprite
+evaluation at dot 257, sprite-0 hit, the odd-frame dot skip, $2005/$2006/$2007
+behaviour and the mid-frame VRAM writes Mappy relies on for its status bar.
+
+Colours use the same 64-entry palette as the reference emulator (Mednafen's
+built-in NES table), verified colour by colour against its rendered output, and
+sprites are looked up in their own palettes at `$3F10-$3F1F` - a sprite's
+palette is *not* the background palette with the same index. Sprite Y points at
+the scanline above the sprite's first row.
+
+Checking rendering against Mednafen's recorded output found and fixed three
+faults: the whole palette was the wrong table (brighter "classic" values
+instead of the reference's), sprites were indexed against the background
+palettes (green "PLAYER 1 READY" instead of red), and sprites sat one scanline
+too high. One further bug - a background prefetch window starting one dot late
+- blanked the leftmost 8 pixels of every scanline.
+
+`tools/compare_mednafen.sh` reproduces the comparison end to end: it records
+Mednafen with its QuickTime recorder, extracts frames with ffmpeg, renders the
+same frames here and diffs them. The result is **pixel-identical frames**:
+
+```
+$ MEDNAFEN=... FFMPEG=... tools/compare_mednafen.sh
+r001.png vs mine_001_+0.png: identical
+...
+5/5 reference frames reproduced pixel-for-pixel
+```
 
 ### Audio
 
@@ -270,10 +301,11 @@ crates/decompiler/   ROM analysis, listing writer, Rust code generator
 crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
 crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
 demo/mappy-music.wav  the soundtrack as rendered by this project
+screenshots/           title, READY and gameplay frames (identical to the reference)
 disassembly/mappy.asm  annotated disassembly (6.4 k lines)
 symbols.txt            names for the routines that have been identified
 docs/DECOMPILATION.md  what the original program does, routine by routine
-tools/                 opcode-table generator, FCEUX/mednafen comparison, test fetch
+tools/                 opcode table generator, reference-emulator comparisons, test fetch
 ```
 
 ## Regenerating the decompilation
