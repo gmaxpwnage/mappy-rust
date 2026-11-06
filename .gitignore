@@ -10,3 +10,5 @@ crates/mos6502/tests/data/*.bin
 __pycache__/
 *.pyc
 /dist
+# wasm build output copied into web/ for local testing
+/web/mappy.wasm

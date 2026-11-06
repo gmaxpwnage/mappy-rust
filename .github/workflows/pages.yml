@@ -1,0 +1,65 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build the WebAssembly site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the wasm module
+        run: cargo build --release --locked --target wasm32-unknown-unknown -p mappy-web
+
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp web/index.html web/mappy.js web/style.css site/
+          cp target/wasm32-unknown-unknown/release/mappy_web.wasm site/mappy.wasm
+          ls -l site
+
+      - name: Smoke test the module (renders a frame, produces audio)
+        run: node web/smoke.js site/mappy.wasm
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

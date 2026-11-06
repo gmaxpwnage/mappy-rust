@@ -6,6 +6,7 @@ members = [
     "crates/mappy-rom",
     "crates/decompiler",
     "crates/mappy-player",
+    "crates/mappy-web",
 ]
 
 [workspace.package]

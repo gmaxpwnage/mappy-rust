@@ -34,6 +34,17 @@ plays the game natively on Linux, macOS and Windows.
                        └─────────────────────┘  ⟵ runs the actual game
 ```
 
+## Play in the browser
+
+**<https://gmaxpwnage.github.io/mappy-rust/>** — the same Rust code compiled to
+WebAssembly, no emulator loop and no bindings layer: `crates/mappy-web` exports
+nine `extern "C"` functions and `web/mappy.js` is the entire frontend (canvas,
+keyboard/touch input, Web Audio). Keys are the same as the native build, and
+there are on-screen buttons for touch devices.
+
+The wasm build is byte-for-byte the same game logic as the native one: after
+150 frames its framebuffer is pixel-identical to `mappy headless`'s.
+
 ## Download
 
 Prebuilt binaries are on the [releases page](https://github.com/gmaxpwnage/mappy-rust/releases):
@@ -310,6 +321,8 @@ crates/nes/          PPU, APU, cartridge, bus, controller; no platform deps
 crates/decompiler/   ROM analysis, listing writer, Rust code generator
 crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
 crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
+crates/mappy-web/    WebAssembly build: C ABI export surface, no bindgen
+web/                 the browser frontend served by GitHub Pages
 demo/mappy-music.wav  the soundtrack as rendered by this project
 screenshots/           title, READY and gameplay frames (identical to the reference)
 disassembly/mappy.asm  annotated disassembly (6.4 k lines)
