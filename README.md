@@ -6,6 +6,13 @@ The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
 code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
 plays the game natively on Linux, macOS, Windows and LG webOS TVs.
 
+> **LG webOS TV / Homebrew Channel:** add
+> `https://gmaxpwnage.github.io/mappy-rust/webos/apps.json` under
+> **Homebrew Channel → Settings → Repositories → Add repository**, then
+> install **Mappy** from the channel. See
+> [Play on an LG webOS TV](#play-on-an-lg-webos-tv) for the Magic Remote
+> mapping and the IPK download.
+
 * **`crates/mappy-rom`** is the game: every 6502 instruction in the ROM,
   translated to a Rust function (16 384 of them), calling into a Rust model of
   the NES hardware. The cartridge data is embedded in the binary, so the result
@@ -103,7 +110,10 @@ required (the app uses SDL2, which the TV provides).
 
 Prebuilt binaries are on the [releases page](https://github.com/gmaxpwnage/mappy-rust/releases):
 Linux (x86_64, aarch64), macOS (Apple silicon, Intel), Windows x86_64, and the
-LG webOS TV IPK (`com.gmaxpwnage.mappy_<version>_arm.ipk`).
+LG webOS TV IPK (`com.gmaxpwnage.mappy_<version>_arm.ipk`). On a TV the easiest
+route is the Homebrew Channel repository
+(`https://gmaxpwnage.github.io/mappy-rust/webos/apps.json`); the full
+instructions are [above](#play-on-an-lg-webos-tv).
 Each archive holds the game (`mappy`), the decompiler and the licence files;
 `SHA256SUMS.txt` covers every archive. The game needs no ROM file — the
 cartridge data is compiled in.
