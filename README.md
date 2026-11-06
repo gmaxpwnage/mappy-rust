@@ -1,6 +1,6 @@
 # Mappy (Japan) (En) — decompiled to Rust
 
-[![CI](https://github.com/gaavin/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gaavin/mappy-rust/actions/workflows/ci.yml)
+[![CI](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml)
 
 The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
 code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
