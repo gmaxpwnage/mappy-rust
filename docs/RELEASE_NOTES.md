@@ -22,6 +22,7 @@ Each archive contains:
   annotated disassembly (`decompiler rom/mappy.nes --asm out.asm --rust out.rs`).
 * README, NOTICE and the two licence files.
 
+Every archive unpacks into a single `mappy-<version>-<platform>/` directory.
 Verify with `sha256sum -c SHA256SUMS.txt`.
 
 ## Running it
@@ -59,6 +60,10 @@ measured frame rate once a second).
   `xattr -d com.apple.quarantine mappy`.
 * **Windows**: unsigned, so SmartScreen may warn once ("More info" → "Run
   anyway").
+* **NixOS**: a generic glibc binary will not start — that is the distro's
+  design, not a bug in the build. Either run it through an FHS environment
+  (`steam-run ./mappy`) or build it natively, which takes two minutes:
+  `nix run github:gmaxpwnage/mappy-rust`.
 
 ## What has been verified
 

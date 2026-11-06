@@ -102,7 +102,7 @@ jobs:
       - name: Create zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path "dist/$env:NAME/*" -DestinationPath "dist/$env:NAME.zip"
+        run: Compress-Archive -Path "dist/$env:NAME" -DestinationPath "dist/$env:NAME.zip"
 
       - name: Create zip (macOS)
         if: runner.os == 'macOS' && matrix.archive == 'zip'
