@@ -14,7 +14,7 @@ pub mod cart;
 pub mod machine;
 pub mod ppu;
 
-pub use apu::Apu;
+pub use apu::{Apu, ApuSnapshot, ChannelState};
 pub use cart::{Cart, Mapper, Mirroring};
 pub use machine::{button, Machine};
 pub use ppu::{Ppu, NES_PALETTE};

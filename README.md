@@ -129,7 +129,7 @@ structure of the original program.
 
 ## Verification
 
-Five independent layers, all runnable with `cargo test --release` plus the
+Seven independent layers, all runnable with `cargo test --release` plus the
 commands below.
 
 1. **6502 correctness** — `mos6502` passes Klaus Dormann's full functional test
@@ -160,14 +160,54 @@ commands below.
    phase. During gameplay 1.8–2.1 % of pixels differ, which is the animation
    phase shift caused by FCEUX's one-frame input pipeline.
 
-4. **Audio timing** — `crates/nes/tests/apu_rate.rs` asserts the APU emits
+4. **Audio correctness** — `crates/nes/tests/apu_waveform.rs` measures what the
+   APU *sounds like*: pulse/triangle tone frequency against the documented
+   formulas, duty ratio against the duty register, noise shift-register clock
+   rate, envelope and length-counter clock rates, and sweep behaviour. A timer
+   clocked at the wrong rate (an octave error) fails these even when every
+   register write is correct.
+
+5. **Audio against a reference emulator** — `tools/audio_check.py` compares
+   this project's audio with FCEUX's per-frame APU state and with mednafen's
+   recorded output (see the Audio section above).
+
+6. **Audio timing** — `crates/nes/tests/apu_rate.rs` asserts the APU emits
    exactly one second of samples per second of CPU time at any requested rate
    (44.1 / 48 / 96 kHz) and ~734 samples per 60 Hz frame, so tempo and pitch
    follow the console clock rather than the host's frame rate.
 
-5. **Game-level smoke test** — `--input "START@19-21"` must produce the
+7. **Game-level smoke test** — `--input "START@19-21"` must produce the
    `PLAYER 1 READY` screen and a live score, i.e. the game really starts,
    which the test asserts through the input-enable byte at `$040F`.
+
+### Audio
+
+The APU is modelled from the NESdev references: pulse timers in APU cycles
+(`f = CPU/(16*(t+1))`), triangle in CPU cycles (`f = CPU/(32*(t+1))`), the
+noise period table as a CPU-cycle count, the DMC rate table, the documented
+duty sequences, the sweep unit with its ones'-complement adder on pulse 1, and
+the four-step frame sequencer with its *cumulative* step boundaries
+(7457/14913/22371/29829 cycles) driving envelopes, length counters and the
+triangle's linear counter. Channels are mixed with the 2A03's non-linear
+output curve, DC-blocked, and resampled with a fractional accumulator.
+
+Audio controls (`--no-audio` disables output entirely):
+
+* the frontend asks the device for its real sample rate and synthesises at
+  exactly that rate, so nothing is resampled on the way out;
+* `demo/mappy-music.wav` is a 25-second capture of the game's soundtrack as
+  rendered by this project.
+
+Checking it against a reference emulator (`tools/audio_check.py`) found and
+fixed five real synthesis bugs: a frame sequencer running 2.5x too slow (all
+envelopes, note lengths and the triangle's linear counter), pulse and noise
+timers clocked at the CPU rate instead of their correct rates (an octave up),
+two swapped duty tables, and a sweep unit that applied its update before
+computing the target period. After the fixes, per-frame channel frequencies
+and duties match FCEUX's APU model exactly (0 of 200 frames differ), and
+against mednafen's recorded output the musical rests line up within 1-4
+frames, the volume envelope correlates at r = 0.96, and every spectral band
+is within 1.2-1.6x of the reference with matching harmonic structure.
 
 ### Frame pacing
 
@@ -208,10 +248,11 @@ crates/nes/          PPU, APU, cartridge, bus, controller; no platform deps
 crates/decompiler/   ROM analysis, listing writer, Rust code generator
 crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
 crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
+demo/mappy-music.wav  the soundtrack as rendered by this project
 disassembly/mappy.asm  annotated disassembly (6.4 k lines)
 symbols.txt            names for the routines that have been identified
 docs/DECOMPILATION.md  what the original program does, routine by routine
-tools/                 opcode-table generator, FCEUX compare script, test fetch
+tools/                 opcode-table generator, FCEUX/mednafen comparison, test fetch
 ```
 
 ## Regenerating the decompilation

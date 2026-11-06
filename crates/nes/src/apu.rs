@@ -1,9 +1,36 @@
 //! The 2A03 audio processing unit.
 //!
 //! Two pulse channels (with envelopes and sweep units), triangle, noise and
-//! DMC, mixed with the console's non-linear output curve and resampled to
-//! 44.1 kHz. Good enough to play Mappy's Namco soundtrack and its sound
-//! effects; it is not a die-accurate model of the DAC.
+//! DMC, mixed with the console's non-linear output curve.
+//!
+//! Timing follows the RP2A03 data sheet / NESdev reference:
+//!
+//! * the pulse timers count in **APU cycles** (half the CPU clock), so a pulse
+//!   period of `t` gives the tone frequency `CPU / (16 * (t + 1))`;
+//! * the triangle timer counts in CPU cycles: `CPU / (32 * (t + 1))`;
+//! * the noise period table is already in CPU cycles, so the shift register is
+//!   clocked at `CPU / period`;
+//! * the DMC timer runs at the CPU clock;
+//! * the frame sequencer is a 240 Hz (7457 CPU cycle) four-step machine.
+
+/// Tone frequency of a pulse channel for timer period `t`.
+#[inline]
+pub fn pulse_frequency(t: u16) -> f64 {
+    CPU_HZ / (16.0 * (t as f64 + 1.0))
+}
+
+/// Tone frequency of the triangle channel for timer period `t`.
+#[inline]
+pub fn triangle_frequency(t: u16) -> f64 {
+    CPU_HZ / (32.0 * (t as f64 + 1.0))
+}
+
+/// LFSR clock rate of the noise channel for a period-table entry `p`, which
+/// is expressed in CPU cycles (APU_Noise, "Noise mode and period").
+#[inline]
+pub fn noise_frequency(p: u16) -> f64 {
+    CPU_HZ / (p.max(1) as f64)
+}
 
 use crate::cart::Cart;
 
@@ -15,11 +42,13 @@ const LENGTH_TABLE: [u8; 32] = [
     192, 24, 72, 26, 16, 28, 32, 30,
 ];
 
+// Duty cycle output waveforms (APU_Pulse, "Duty Cycle Sequences"):
+// 12.5%, 25%, 50%, and the "25% negated" 75% pattern.
 const DUTY_TABLE: [[u8; 8]; 4] = [
     [0, 1, 0, 0, 0, 0, 0, 0],
     [0, 1, 1, 0, 0, 0, 0, 0],
     [0, 1, 1, 1, 1, 0, 0, 0],
-    [1, 0, 0, 1, 1, 1, 1, 0],
+    [1, 0, 0, 1, 1, 1, 1, 1],
 ];
 
 const TRIANGLE_TABLE: [u8; 32] = [
@@ -68,6 +97,61 @@ impl Envelope {
     }
 }
 
+/// The sweep unit shared by both pulse channels.
+#[derive(Default)]
+struct Sweep {
+    enabled: bool,
+    period: u8,
+    negate: bool,
+    shift: u8,
+    divider: u8,
+    reload: bool,
+}
+
+impl Sweep {
+    /// Signed change the sweep applies to `period`.
+    ///
+    /// The two adders' carry inputs are wired differently: pulse 1 negates
+    /// with the ones' complement (one more than the plain negation), pulse 2
+    /// with the two's complement.
+    fn delta(&self, period: u16, negate_extra: bool) -> i32 {
+        let d = (period >> self.shift) as i32;
+        if self.negate {
+            -d - if negate_extra { 1 } else { 0 }
+        } else {
+            d
+        }
+    }
+
+    fn target(&self, period: u16, negate_extra: bool) -> i32 {
+        period as i32 + self.delta(period, negate_extra)
+    }
+
+    /// A pulse is silenced when its period is under 8 or the sweep would push
+    /// the target period past $7FF. This muting applies whether or not the
+    /// sweep unit is enabled.
+    fn muted(&self, period: u16, negate_extra: bool) -> bool {
+        period < 8 || self.target(period, negate_extra) > 0x7FF
+    }
+
+    /// Half-frame clock.
+    fn clock(&mut self, period: &mut u16, negate_extra: bool) {
+        if self.divider == 0
+            && self.enabled
+            && self.shift > 0
+            && !self.muted(*period, negate_extra)
+        {
+            *period = self.target(*period, negate_extra).clamp(0, 0x7FF) as u16;
+        }
+        if self.divider == 0 || self.reload {
+            self.divider = self.period;
+            self.reload = false;
+        } else {
+            self.divider -= 1;
+        }
+    }
+}
+
 #[derive(Default)]
 struct Pulse {
     enabled: bool,
@@ -78,16 +162,11 @@ struct Pulse {
     length: u8,
     length_halt: bool,
     envelope: Envelope,
-    sweep_enabled: bool,
-    sweep_period: u8,
-    sweep_negate: bool,
-    sweep_shift: u8,
-    sweep_divider: u8,
-    sweep_reload: bool,
-    target_period: u16,
+    sweep: Sweep,
 }
 
 impl Pulse {
+    /// One APU cycle: the pulse timer counts in APU cycles (CPU cycles / 2).
     fn clock_timer(&mut self) {
         if self.timer == 0 {
             self.timer = self.timer_period;
@@ -97,8 +176,8 @@ impl Pulse {
         }
     }
 
-    fn output(&self) -> u8 {
-        if !self.enabled || self.length == 0 || self.timer_period < 8 || self.target_period > 0x7FF {
+    fn output(&self, negate_extra: bool) -> u8 {
+        if !self.enabled || self.length == 0 || self.sweep.muted(self.timer_period, negate_extra) {
             return 0;
         }
         if DUTY_TABLE[self.duty as usize][self.seq as usize] == 0 {
@@ -106,30 +185,6 @@ impl Pulse {
         } else {
             self.envelope.output()
         }
-    }
-
-    fn clock_sweep(&mut self) {
-        let delta = self.timer_period >> self.sweep_shift;
-        if self.sweep_enabled && self.sweep_divider == 0 && self.sweep_shift > 0 {
-            if self.sweep_negate {
-                let p = self.timer_period.wrapping_sub(delta);
-                self.timer_period = p;
-            } else {
-                self.timer_period = self.timer_period.wrapping_add(delta);
-            }
-        }
-        if self.sweep_divider == 0 || self.sweep_reload {
-            self.sweep_divider = self.sweep_period;
-            self.sweep_reload = false;
-        } else {
-            self.sweep_divider -= 1;
-        }
-        let delta = self.timer_period >> self.sweep_shift;
-        self.target_period = if self.sweep_negate {
-            self.timer_period.wrapping_sub(delta)
-        } else {
-            self.timer_period.wrapping_add(delta)
-        };
     }
 }
 
@@ -147,6 +202,7 @@ struct Triangle {
 }
 
 impl Triangle {
+    /// One CPU cycle: the triangle timer counts in CPU cycles, unlike pulses.
     fn clock_timer(&mut self) {
         if self.timer == 0 {
             self.timer = self.timer_period;
@@ -183,6 +239,8 @@ struct Noise {
     mode: bool,
     timer: u16,
     timer_period: u16,
+    /// Shift-register clocks since power-on (diagnostics and tests).
+    clocks: u64,
     shift: u16,
     length: u8,
     length_halt: bool,
@@ -194,9 +252,12 @@ impl Noise {
         Noise { shift: 1, ..Default::default() }
     }
 
+    /// One CPU cycle. The period-table value is a count of CPU cycles, so the
+    /// shift register is clocked every `timer_period` cycles.
     fn clock_timer(&mut self) {
-        if self.timer == 0 {
+        if self.timer <= 1 {
             self.timer = self.timer_period;
+            self.clocks += 1;
             let feedback = if self.mode {
                 ((self.shift >> 0) & 1) ^ ((self.shift >> 6) & 1)
             } else {
@@ -295,14 +356,40 @@ impl Dmc {
     }
 }
 
-/// The frame sequencer clock phases.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Seq {
-    Step1,
-    Step2,
-    Step3,
-    Step4,
-    Step5,
+/// Observable state of one APU channel, for tests and the `apu` debug command.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChannelState {
+    pub enabled: bool,
+    pub length: u8,
+    /// Timer period in CPU cycles per sequencer step (the raw register value
+    /// for pulses/triangle, the period-table entry for noise).
+    pub period: u16,
+    /// Resulting tone frequency in Hz.
+    pub frequency: f64,
+    pub duty: u8,
+    /// Envelope volume (0-15).
+    pub volume: u8,
+    /// Current output level (0-15, or 0-127 for the DMC).
+    pub output: u8,
+    /// Triangle linear counter (0 for the other channels).
+    pub linear: u8,
+    /// Length counter halt flag.
+    pub halt: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ApuSnapshot {
+    pub pulse1: ChannelState,
+    pub pulse2: ChannelState,
+    pub triangle: ChannelState,
+    pub noise: ChannelState,
+    pub dmc_output: u8,
+    /// Shift-register clocks of the noise channel since power-on.
+    pub noise_clocks: u64,
+    /// Frame sequencer clocks since power-on.
+    pub quarter_clocks: u64,
+    pub half_clocks: u64,
+    pub frame_irq: bool,
 }
 
 pub struct Apu {
@@ -311,12 +398,16 @@ pub struct Apu {
     triangle: Triangle,
     noise: Noise,
     dmc: Dmc,
+    /// Toggles every CPU cycle; true on the APU (CPU / 2) tick.
+    apu_phase: bool,
     /// 0 = 4-step (~240 Hz), 1 = 5-step (~192 Hz).
     five_step: bool,
     frame_irq_inhibit: bool,
     frame_irq: bool,
     frame_cycle: u64,
-    frame_seq: Seq,
+    /// Frame-sequencer clocks since power-on (diagnostics and tests).
+    quarter_clocks: u64,
+    half_clocks: u64,
 
     /// Resampling state: fractional position of the next output sample.
     sample_accum: f64,
@@ -351,11 +442,13 @@ impl Apu {
             triangle: Triangle::default(),
             noise: Noise::new(),
             dmc: Dmc::default(),
+            apu_phase: false,
             five_step: false,
             frame_irq_inhibit: false,
             frame_irq: false,
             frame_cycle: 0,
-            frame_seq: Seq::Step1,
+            quarter_clocks: 0,
+            half_clocks: 0,
             sample_accum: 0.0,
             sample_count: 0,
             acc_pulse: 0,
@@ -390,11 +483,11 @@ impl Apu {
                 self.pulse1.envelope.volume = val & 0x0F;
             }
             0x4001 => {
-                self.pulse1.sweep_enabled = val & 0x80 != 0;
-                self.pulse1.sweep_period = (val >> 4) & 0x07;
-                self.pulse1.sweep_negate = val & 0x08 != 0;
-                self.pulse1.sweep_shift = val & 0x07;
-                self.pulse1.sweep_reload = true;
+                self.pulse1.sweep.enabled = val & 0x80 != 0;
+                self.pulse1.sweep.period = (val >> 4) & 0x07;
+                self.pulse1.sweep.negate = val & 0x08 != 0;
+                self.pulse1.sweep.shift = val & 0x07;
+                self.pulse1.sweep.reload = true;
             }
             0x4002 => {
                 self.pulse1.timer_period = (self.pulse1.timer_period & 0x700) | val as u16;
@@ -416,11 +509,11 @@ impl Apu {
                 self.pulse2.envelope.volume = val & 0x0F;
             }
             0x4005 => {
-                self.pulse2.sweep_enabled = val & 0x80 != 0;
-                self.pulse2.sweep_period = (val >> 4) & 0x07;
-                self.pulse2.sweep_negate = val & 0x08 != 0;
-                self.pulse2.sweep_shift = val & 0x07;
-                self.pulse2.sweep_reload = true;
+                self.pulse2.sweep.enabled = val & 0x80 != 0;
+                self.pulse2.sweep.period = (val >> 4) & 0x07;
+                self.pulse2.sweep.negate = val & 0x08 != 0;
+                self.pulse2.sweep.shift = val & 0x07;
+                self.pulse2.sweep.reload = true;
             }
             0x4006 => {
                 self.pulse2.timer_period = (self.pulse2.timer_period & 0x700) | val as u16;
@@ -512,13 +605,58 @@ impl Apu {
                 if self.frame_irq_inhibit {
                     self.frame_irq = false;
                 }
-                // Writing $4017 immediately clocks the sequencer.
+                // Writing $4017 immediately clocks the sequencer and resets it.
                 self.clock_quarter();
                 self.clock_half();
                 self.frame_cycle = 0;
-                self.frame_seq = Seq::Step1;
             }
             _ => {}
+        }
+    }
+
+    /// Snapshot every channel's musical state (used by tests and `mappy apu`).
+    pub fn snapshot(&self) -> ApuSnapshot {
+        let pulse = |p: &Pulse, negate_extra: bool| ChannelState {
+            enabled: p.enabled,
+            length: p.length,
+            period: p.timer_period,
+            frequency: pulse_frequency(p.timer_period),
+            duty: p.duty,
+            volume: p.envelope.output(),
+            output: p.output(negate_extra),
+            linear: 0,
+            halt: p.length_halt,
+        };
+        ApuSnapshot {
+            pulse1: pulse(&self.pulse1, true),
+            pulse2: pulse(&self.pulse2, false),
+            triangle: ChannelState {
+                enabled: self.triangle.enabled,
+                length: self.triangle.length,
+                period: self.triangle.timer_period,
+                frequency: triangle_frequency(self.triangle.timer_period),
+                duty: 0,
+                volume: if self.triangle.length > 0 && self.triangle.linear_counter > 0 { 15 } else { 0 },
+                output: self.triangle.output(),
+                linear: self.triangle.linear_counter,
+                halt: self.triangle.control,
+            },
+            noise: ChannelState {
+                enabled: self.noise.enabled,
+                length: self.noise.length,
+                period: self.noise.timer_period,
+                frequency: noise_frequency(self.noise.timer_period),
+                duty: 0,
+                volume: self.noise.envelope.output(),
+                output: self.noise.output(),
+                linear: 0,
+                halt: self.noise.length_halt,
+            },
+            dmc_output: self.dmc.output,
+            noise_clocks: self.noise.clocks,
+            quarter_clocks: self.quarter_clocks,
+            half_clocks: self.half_clocks,
+            frame_irq: self.frame_irq,
         }
     }
 
@@ -562,8 +700,8 @@ impl Apu {
     }
 
     fn clock_half(&mut self) {
-        self.pulse1.clock_sweep();
-        self.pulse2.clock_sweep();
+        self.pulse1.sweep.clock(&mut self.pulse1.timer_period, true);
+        self.pulse2.sweep.clock(&mut self.pulse2.timer_period, false);
         for p in [&mut self.pulse1, &mut self.pulse2] {
             if !p.length_halt && p.length > 0 {
                 p.length -= 1;
@@ -579,54 +717,57 @@ impl Apu {
 
     /// Advance the APU by one CPU cycle.
     pub fn tick(&mut self, cart: &Cart) {
-        self.pulse1.clock_timer();
-        self.pulse2.clock_timer();
+        // Pulse timers are clocked at the APU rate (CPU / 2); the triangle,
+        // noise and DMC timers are clocked at the CPU rate.
+        self.apu_phase = !self.apu_phase;
+        if self.apu_phase {
+            self.pulse1.clock_timer();
+            self.pulse2.clock_timer();
+        }
         self.triangle.clock_timer();
         self.noise.clock_timer();
         self.dmc.clock_timer(cart);
 
         // Frame sequencer.
+        //
+        // The step boundaries below are the *cumulative* cycle counts of the
+        // frame counter (APU_Frame_Counter): 7457 / 14913 / 22371 / 29829 for
+        // the four-step mode, plus 37281 for the five-step mode, wrapping at
+        // the end of the sequence. Treating them as per-step delays would run
+        // every envelope, length and linear counter far too slowly.
         self.frame_cycle += 1;
-        let (quarter, half) = match (self.five_step, self.frame_seq) {
-            (false, Seq::Step1) => (7457, (true, false)),
-            (false, Seq::Step2) => (14913, (false, true)),
-            (false, Seq::Step3) => (22371, (true, false)),
-            (false, Seq::Step4) => (29829, (true, true)),
-            (true, Seq::Step1) => (7457, (true, false)),
-            (true, Seq::Step2) => (14913, (false, true)),
-            (true, Seq::Step3) => (22371, (true, false)),
-            (true, Seq::Step4) => (29829, (false, false)),
-            (true, Seq::Step5) => (37281, (true, true)),
-            (false, Seq::Step5) => (u64::MAX, (false, false)),
+        let (quarter, half, irq) = match (self.five_step, self.frame_cycle) {
+            (false, 7457) => (true, false, false),
+            (false, 14913) => (false, true, false),
+            (false, 22371) => (true, false, false),
+            (false, 29829) => (true, true, true),
+            (true, 7457) => (true, false, false),
+            (true, 14913) => (false, true, false),
+            (true, 22371) => (true, false, false),
+            (true, 37281) => (true, true, false),
+            _ => (false, false, false),
         };
-        if self.frame_cycle >= quarter {
-            self.frame_cycle = 0;
-            let (q, h) = half;
-            if q {
+        if quarter || half {
+            if quarter {
+                self.quarter_clocks += 1;
                 self.clock_quarter();
             }
-            if h {
+            if half {
+                self.half_clocks += 1;
                 self.clock_half();
             }
-            if !self.five_step && self.frame_seq == Seq::Step4 && !self.frame_irq_inhibit {
+            if irq && !self.frame_irq_inhibit {
                 self.frame_irq = true;
             }
-            self.frame_seq = match (self.five_step, self.frame_seq) {
-                (false, Seq::Step1) => Seq::Step2,
-                (false, Seq::Step2) => Seq::Step3,
-                (false, Seq::Step3) => Seq::Step4,
-                (false, Seq::Step4) => Seq::Step1,
-                (true, Seq::Step1) => Seq::Step2,
-                (true, Seq::Step2) => Seq::Step3,
-                (true, Seq::Step3) => Seq::Step4,
-                (true, Seq::Step4) => Seq::Step5,
-                (true, Seq::Step5) => Seq::Step1,
-                (false, Seq::Step5) => Seq::Step1,
-            };
+        }
+        let step = if self.five_step { 37282 } else { 29830 };
+        if self.frame_cycle >= step {
+            self.frame_cycle = 0;
         }
 
         // Resampling: accumulate channel outputs over one sample period.
-        self.acc_pulse += self.pulse1.output() as u32 + self.pulse2.output() as u32;
+        // Pulse 1 is the channel with the ones'-complement sweep adder.
+        self.acc_pulse += self.pulse1.output(true) as u32 + self.pulse2.output(false) as u32;
         self.acc_triangle += self.triangle.output() as u32;
         self.acc_noise += self.noise.output() as u32;
         self.acc_dmc += self.dmc.output as u32;

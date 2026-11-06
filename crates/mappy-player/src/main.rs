@@ -44,6 +44,7 @@ fn main() {
         "nt" => nt(&mut opts),
         "probe" => probe(&mut opts),
         "bench" => bench(&mut opts),
+        "apu" => apu_dump(&mut opts),
         "-h" | "--help" | "help" => usage(),
         other => {
             eprintln!("unknown command {other:?}\n");
@@ -95,6 +96,8 @@ struct Opts {
     watch_ram: Option<u16>,
     region: Option<(u32, u32, u32, u32)>,
     decompiled: bool,
+    /// True when `--rom` was given explicitly.
+    rom_given: bool,
     fps: f64,
     stats: bool,
 }
@@ -116,6 +119,7 @@ impl Opts {
             watch_ram: None,
             region: None,
             decompiled: true,
+            rom_given: false,
             fps: 60.0988,
             stats: false,
         };
@@ -130,6 +134,7 @@ impl Opts {
             match args[i].as_str() {
                 "--rom" => {
                     o.rom_path = PathBuf::from(need(i));
+                    o.rom_given = true;
                     i += 2;
                 }
                 "--frames" => {
@@ -224,6 +229,12 @@ impl Opts {
         })
     }
 
+    /// The decompiled engine is a static translation of the embedded cartridge
+    /// image, so a different `--rom` can only be run through the interpreter.
+    fn use_interpreter(&self) -> bool {
+        !self.decompiled || self.rom_given
+    }
+
     fn script(&self) -> InputScript {
         InputScript::parse(&self.script).unwrap_or_else(|e| {
             eprintln!("bad --input: {e}");
@@ -240,8 +251,15 @@ fn headless(o: &mut Opts) {
     let mut game = mappy_rom::Mappy::new();
     let script = o.script();
     let started = std::time::Instant::now();
+    let decompiled = !o.use_interpreter();
+    if o.decompiled && o.rom_given {
+        eprintln!(
+            "note: the decompiled engine runs the embedded cartridge image; \
+             --rom selects the interpreter engine"
+        );
+    }
     for f in 0..o.frames {
-        if o.decompiled {
+        if decompiled {
             game.set_pad1(script.at(f));
             game.run_frame();
         } else {
@@ -249,22 +267,22 @@ fn headless(o: &mut Opts) {
             m.run_frame_interpreter();
         }
         if f % o.every == 0 || f + 1 == o.frames {
-            let fb = if o.decompiled { game.rgb() } else { m.framebuffer_rgb() };
+            let fb = if decompiled { game.rgb() } else { m.framebuffer_rgb() };
             let path = format!("{}/frame_{f:04}.png", o.outdir.display());
             png::write_nes_frame(&path, &fb).unwrap();
-            let pc = if o.decompiled { game.machine.cpu.pc } else { m.cpu.pc };
+            let pc = if decompiled { game.machine.cpu.pc } else { m.cpu.pc };
             println!("frame {f}: pc={pc:04X} -> {path}");
         }
     }
     let elapsed = started.elapsed().as_secs_f64();
-    let total = if o.decompiled { game.machine.total_cycles } else { m.total_cycles };
+    let total = if decompiled { game.machine.total_cycles } else { m.total_cycles };
     println!(
         "{} frames, {total} machine cycles ({:.2} per frame, PPU dots/frame {:.1})",
         o.frames,
         total as f64 / o.frames as f64,
         3.0 * total as f64 / o.frames as f64
     );
-    if o.decompiled {
+    if decompiled {
         println!(
             "{} frames in {:.3}s = {:.0} fps (decompiled engine, single thread)",
             o.frames,
@@ -272,10 +290,10 @@ fn headless(o: &mut Opts) {
             o.frames as f64 / elapsed
         );
     }
-    let samples = if o.decompiled { game.take_audio() } else { m.apu.drain_samples() };
+    let samples = if decompiled { game.take_audio() } else { m.apu.drain_samples() };
     if !samples.is_empty() {
         let path = format!("{}/audio.wav", o.outdir.display());
-        let rate = if o.decompiled {
+        let rate = if decompiled {
             game.machine.apu.sample_rate() as u32
         } else {
             m.apu.sample_rate() as u32
@@ -420,6 +438,33 @@ fn ram(o: &mut Opts) {
         std::fs::write(&o.out, m.ram).unwrap();
         println!("wrote 2048 RAM bytes to {:?}", o.out);
     }
+}
+
+/// Per-frame APU channel state as CSV, for comparison against a reference
+/// emulator (`mappy apu --frames N --input ... --out /tmp/mine.csv`).
+fn apu_dump(o: &mut Opts) {
+    let rom = o.rom();
+    let cart = nes::Cart::from_ines(&rom).expect("parse rom");
+    let mut m = Machine::new(cart);
+    let script = o.script();
+    let mut out = String::from(
+        "frame,p1_freq,p1_vol,p1_duty,p1_len,p2_freq,p2_vol,p2_duty,p2_len,tri_freq,tri_vol,tri_len,noise_freq,noise_vol,noise_len,dmc,tri_linear,tri_halt\n",
+    );
+    for f in 0..o.frames {
+        m.pad1 = script.at(f);
+        m.run_frame_interpreter();
+        let s = m.apu.snapshot();
+        out.push_str(&format!(
+            "{f},{:.3},{},{},{},{:.3},{},{},{},{:.3},{},{},{:.3},{},{},{},{},{}\n",
+            s.pulse1.frequency, s.pulse1.volume, s.pulse1.duty, s.pulse1.length,
+            s.pulse2.frequency, s.pulse2.volume, s.pulse2.duty, s.pulse2.length,
+            s.triangle.frequency, s.triangle.volume, s.triangle.length,
+            s.noise.frequency, s.noise.volume, s.noise.length, s.dmc_output,
+            s.triangle.linear, if s.triangle.halt { 1 } else { 0 },
+        ));
+    }
+    std::fs::write(&o.out, out).unwrap();
+    println!("wrote {} frames of APU state to {:?}", o.frames, o.out);
 }
 
 /// Throughput measurement: frames per second of the decompiled engine.
