@@ -259,10 +259,16 @@ impl Opts {
 
 fn headless(o: &mut Opts) {
     std::fs::create_dir_all(&o.outdir).ok();
-    let rom = o.rom();
-    let cart = nes::Cart::from_ines(&rom).expect("parse rom");
-    let mut m = Machine::new(cart);
     let mut game = mappy_rom::Mappy::new();
+    // The decompiled engine carries its own cartridge image, so a ROM file is
+    // only needed when the reference interpreter is selected.
+    let mut m = if o.use_interpreter() {
+        let rom = o.rom();
+        let cart = nes::Cart::from_ines(&rom).expect("parse rom");
+        Some(Machine::new(cart))
+    } else {
+        None
+    };
     let script = o.script();
     let started = std::time::Instant::now();
     let decompiled = !o.use_interpreter();
@@ -277,19 +283,32 @@ fn headless(o: &mut Opts) {
             game.set_pad1(script.at(f));
             game.run_frame();
         } else {
+            let m = m.as_mut().expect("interpreter machine");
             m.pad1 = script.at(f);
             m.run_frame_interpreter();
         }
         if f % o.every == 0 || f + 1 == o.frames {
-            let fb = if decompiled { game.rgb() } else { m.framebuffer_rgb() };
+            let fb = if decompiled {
+                game.rgb()
+            } else {
+                m.as_ref().expect("interpreter machine").framebuffer_rgb()
+            };
             let path = format!("{}/frame_{f:04}.png", o.outdir.display());
             png::write_nes_frame(&path, &fb).unwrap();
-            let pc = if decompiled { game.machine.cpu.pc } else { m.cpu.pc };
+            let pc = if decompiled {
+                game.machine.cpu.pc
+            } else {
+                m.as_ref().expect("interpreter machine").cpu.pc
+            };
             println!("frame {f}: pc={pc:04X} -> {path}");
         }
     }
     if o.dump_indices {
-        let ppu = if decompiled { &game.machine.ppu } else { &m.ppu };
+        let ppu = if decompiled {
+            &game.machine.ppu
+        } else {
+            &m.as_ref().expect("interpreter machine").ppu
+        };
         std::fs::write(o.outdir.join("indices.bin"), ppu.pixels).unwrap();
         std::fs::write(o.outdir.join("nametables.bin"), ppu.nametables).unwrap();
         std::fs::write(o.outdir.join("palette.bin"), ppu.palette).unwrap();
@@ -304,7 +323,11 @@ fn headless(o: &mut Opts) {
         println!("wrote framebuffer indices, nametables, palette RAM and OAM to {:?}", o.outdir);
     }
     let elapsed = started.elapsed().as_secs_f64();
-    let total = if decompiled { game.machine.total_cycles } else { m.total_cycles };
+    let total = if decompiled {
+        game.machine.total_cycles
+    } else {
+        m.as_ref().expect("interpreter machine").total_cycles
+    };
     println!(
         "{} frames, {total} machine cycles ({:.2} per frame, PPU dots/frame {:.1})",
         o.frames,
@@ -319,13 +342,17 @@ fn headless(o: &mut Opts) {
             o.frames as f64 / elapsed
         );
     }
-    let samples = if decompiled { game.take_audio() } else { m.apu.drain_samples() };
+    let samples = if decompiled {
+        game.take_audio()
+    } else {
+        m.as_mut().expect("interpreter machine").apu.drain_samples()
+    };
     if !samples.is_empty() {
         let path = format!("{}/audio.wav", o.outdir.display());
         let rate = if decompiled {
             game.machine.apu.sample_rate() as u32
         } else {
-            m.apu.sample_rate() as u32
+            m.as_ref().expect("interpreter machine").apu.sample_rate() as u32
         };
         write_wav(&path, &samples, rate);
         println!("wrote {path} ({} samples)", samples.len());
