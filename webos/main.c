@@ -128,6 +128,14 @@ static void poll_events(void) {
         case SDL_KEYUP:
             handle_key(event.key.keysym.sym, 0);
             break;
+        /* In pointer mode the Magic Remote's OK button arrives as a click;
+         * in 5-way mode it arrives as Return. Both mean A. */
+        case SDL_MOUSEBUTTONDOWN:
+            if (event.button.button == SDL_BUTTON_LEFT) set_button(BTN_A, 1);
+            break;
+        case SDL_MOUSEBUTTONUP:
+            if (event.button.button == SDL_BUTTON_LEFT) set_button(BTN_A, 0);
+            break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) pad_bits = 0;
             break;
