@@ -1,0 +1,32 @@
+Mappy decompiled to Rust
+Copyright (c) 2026 Max Power
+
+This project contains two kinds of material.
+
+1. Original work, licensed under MIT OR Apache-2.0 (see LICENSE-MIT and
+   LICENSE-APACHE):
+
+     crates/mos6502/      6502 core, opcode table, disassembler
+     crates/nes/          PPU, APU, cartridge and bus models
+     crates/decompiler/   static analysis, listing writer, Rust code generator
+     crates/mappy-player/ window/audio frontend and analysis tools
+     tools/               generators and reference-emulator comparison scripts
+     docs/, README.md
+
+2. Material derived from the arcade/NES game *Mappy*, which is
+   Copyright (c) 1983, 1984 Namco Ltd., all rights reserved:
+
+     crates/mappy-rom/data/{prg,chr}.bin   the cartridge's PRG and CHR ROM
+     crates/mappy-rom/src/generated.rs     the game translated to Rust
+     disassembly/mappy.asm                 the game disassembled
+     demo/mappy-music.wav                  the soundtrack rendered by this project
+     screenshots/                          frames captured from the game
+
+   This material is included so the project can run and be studied, and is
+   NOT covered by the MIT/Apache-2.0 grant above. Use it only with a copy of
+   the cartridge you are entitled to use, and do not redistribute it
+   commercially.
+
+The 6502 conformance suite by Klaus Dormann (crates/mos6502/tests/data/) is
+GPL-licensed and is deliberately not vendored here; tools/fetch_tests.sh
+downloads it on demand.

@@ -1,5 +1,7 @@
 # Mappy (Japan) (En) — decompiled to Rust
 
+[![CI](https://github.com/gaavin/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gaavin/mappy-rust/actions/workflows/ci.yml)
+
 The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
 code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
 plays the game natively on Linux, macOS and Windows.
@@ -362,9 +364,17 @@ FCEUX comparison above is the evidence.
 
 ## Licensing
 
-The decompiler, emulator core and frontend in this repository are original
-work. **Mappy is © 1983, 1984 Namco Ltd.**, all rights reserved; the cartridge
-image and the data extracted from it (`rom/`, `crates/mappy-rom/data/`,
-`disassembly/`) are included only for personal, non-commercial use of a ROM
-the owner already possesses. The 6502 functional test suite by Klaus Dormann is
-GPL and is downloaded on demand, never vendored.
+The 6502 core, the NES hardware model, the decompiler, the frontend and the
+tooling are original work, dual-licensed MIT OR Apache-2.0 — see `LICENSE-MIT`
+and `LICENSE-APACHE`.
+
+**Mappy is © 1983, 1984 Namco Ltd.**, all rights reserved. Everything derived
+from the cartridge — `crates/mappy-rom/data/{prg,chr}.bin`,
+`crates/mappy-rom/src/generated.rs`, `disassembly/mappy.asm`,
+`demo/mappy-music.wav` and the screenshots — is included so the project runs
+and can be studied, and is **not** covered by that license. Treat it as personal
+use material, like any other decompilation project: bring your own cartridge
+image, keep it non-commercial, and see `NOTICE` for the exact split.
+
+The 6502 conformance suite by Klaus Dormann is GPL; it is fetched by
+`tools/fetch_tests.sh` and never vendored here.
