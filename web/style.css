@@ -1,18 +1,12 @@
-/* An upright arcade cabinet for a browser page: marquee, CRT bezel,
-   control panel with a joystick, coin door. No images, no web fonts. */
+/* Mappy, in the browser: a NES-era layout with a dark page around it. */
 
 :root {
-  --cabinet: #16110e;
-  --cabinet-edge: #241a15;
-  --panel: #1d1512;
-  --panel-edge: #2f231d;
+  --bg: #12100f;
+  --panel: #1c1917;
+  --ink: #e8e2da;
+  --dim: #a49a90;
   --red: #c82800;
-  --red-lit: #ef4a15;
-  --gold: #f0b45a;
-  --cream: #f4e6cd;
-  --dim: #a2907f;
-  --stick: #2a1a14;
-  --screen-ratio: 256 / 240;
+  --red-bright: #e04a1a;
 }
 
 * { box-sizing: border-box; }
@@ -20,576 +14,169 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  background: #090706;
-  color: var(--cream);
+  background: radial-gradient(circle at 50% 0%, #241d19, var(--bg) 70%);
+  color: var(--ink);
   font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-/* ------------------------------------------------------------- the room --- */
-
-.room {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: clamp(0.75rem, 2vw, 2rem) 1rem 3rem;
-  background:
-    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(255, 110, 40, 0.10), transparent 70%),
-    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(120, 40, 10, 0.18), transparent 70%),
-    linear-gradient(#0b0807, #131010 55%, #0a0807);
-}
-
-/* ---------------------------------------------------------- the cabinet --- */
-
-.cabinet {
-  width: min(100%, 44rem);
-  padding: 0.9rem clamp(0.6rem, 2vw, 1.4rem) 1rem;
-  border-radius: 18px 18px 10px 10px;
-  background:
-    linear-gradient(180deg, #241c17 0%, #1a1411 6%, var(--cabinet) 40%, #100c0a 100%);
-  box-shadow:
-    0 0 0 1px #3a2b22,
-    inset 0 1px 0 rgba(255, 205, 165, 0.16),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.9),
-    0 2px 0 #43322a,
-    0 26px 50px -18px rgba(0, 0, 0, 0.95),
-    0 60px 120px -40px rgba(0, 0, 0, 0.9),
-    0 0 110px rgba(210, 50, 0, 0.10);
-}
-
-/* --------------------------------------------------------------- marquee --- */
-
-.marquee {
-  position: relative;
-  margin: 0.2rem auto 0.55rem;
-  max-width: 34rem;
-}
-
-.marquee-panel {
-  position: relative;
-  padding: 0.65rem 1.4rem 0.7rem;
-  border-radius: 12px;
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
   text-align: center;
-  background:
-    linear-gradient(180deg, rgba(255, 210, 150, 0.20), transparent 55%),
-    radial-gradient(ellipse 120% 140% at 50% -30%, #ff8a3c 0%, var(--red) 42%, #6b1405 78%, #2a0c05 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 220, 180, 0.55),
-    inset 0 -10px 24px rgba(0, 0, 0, 0.55),
-    0 0 34px rgba(255, 90, 30, 0.35),
-    0 0 0 1px #4a1a0b;
 }
 
-.marquee-panel::after {
-  /* the highlight sweep across a backlit sign */
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(102deg, transparent 32%, rgba(255, 255, 255, 0.16) 46%, transparent 60%);
-  pointer-events: none;
-}
-
-.logo {
-  margin: 0;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: clamp(1.9rem, 7vw, 3.1rem);
-  font-weight: 800;
-  letter-spacing: 0.22em;
+header h1 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #fff3dc;
-  text-shadow:
-    0 0 6px rgba(255, 236, 200, 0.95),
-    0 0 22px rgba(255, 130, 40, 0.85),
-    0 3px 0 #7d1a02,
-    0 5px 10px rgba(0, 0, 0, 0.6);
+  color: var(--red-bright);
+  text-shadow: 0 2px 0 #7a1a00;
 }
 
-.tagline {
-  margin: 0.15rem 0 0;
-  font-size: clamp(0.58rem, 1.6vw, 0.72rem);
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: rgba(255, 232, 205, 0.78);
+.sub {
+  margin: 0 auto 1.2rem;
+  max-width: 40rem;
+  color: var(--dim);
 }
 
-.marquee-leds {
-  display: flex;
-  justify-content: center;
-  gap: 0.55rem;
-  margin-top: 0.45rem;
-}
+.sub a, footer a { color: var(--red-bright); }
 
-.marquee-leds span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #ffcf7a;
-  box-shadow: 0 0 6px #ff9a3c, 0 0 12px rgba(255, 120, 40, 0.7);
-  animation: marquee-blink 2.4s infinite;
-}
-
-.marquee-leds span:nth-child(2) { animation-delay: 0.3s; }
-.marquee-leds span:nth-child(3) { animation-delay: 0.6s; }
-.marquee-leds span:nth-child(4) { animation-delay: 0.9s; }
-.marquee-leds span:nth-child(5) { animation-delay: 1.2s; }
-
-@keyframes marquee-blink {
-  0%, 60%, 100% { opacity: 0.85; }
-  70% { opacity: 0.25; }
-}
-
-/* ----------------------------------------------------------------- bezel --- */
-
-.bezel {
-  display: grid;
-  grid-template-columns: 0.55fr minmax(0, 34rem) 0.55fr;
-  align-items: stretch;
-  gap: clamp(0.4rem, 1.5vw, 0.9rem);
-  padding: clamp(0.5rem, 1.6vw, 0.9rem);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #0e0b0a, #050404 70%);
-  box-shadow:
-    inset 0 0 0 1px #241a15,
-    inset 0 12px 24px rgba(0, 0, 0, 0.9),
-    inset 0 -10px 20px rgba(0, 0, 0, 0.9);
-}
-
-.speaker {
-  align-self: stretch;
-  margin: 12% 0;
-  border-radius: 6px;
-  background-image:
-    radial-gradient(circle at 50% 50%, #191211 0 2.2px, transparent 2.4px),
-    linear-gradient(#241a16, #0d0a09);
-  background-size: 13px 13px, 100% 100%;
-  box-shadow: inset 0 0 0 1px #2b201a, inset 0 0 18px rgba(0, 0, 0, 0.8);
-}
-
-.screen {
+#stage {
   position: relative;
+  margin: 0 auto;
+  width: min(100%, 46rem);
+  background: #000;
   border-radius: 10px;
-  padding: 7px;
-  background: #000;
-  box-shadow:
-    inset 0 0 0 1px #3b2c24,
-    inset 0 0 0 3px #0a0807,
-    inset 0 0 14px rgba(0, 0, 0, 0.85),
-    0 0 0 1px #000,
-    0 0 26px rgba(255, 90, 20, 0.06);
-}
-
-/* faint phosphor bleed from the tube */
-.crt::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(255, 210, 170, 0.05), transparent 70%);
-  mix-blend-mode: screen;
-}
-
-.crt {
-  position: relative;
-  border-radius: 8px / 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px #2c2420;
   overflow: hidden;
-  background: #000;
-  box-shadow:
-    inset 0 0 26px rgba(0, 0, 0, 0.9),
-    inset 0 0 70px rgba(0, 0, 0, 0.55);
+  aspect-ratio: 256 / 240;
 }
 
 #screen {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  filter: saturate(1.06) contrast(1.03);
 }
 
-/* glass reflection + scanlines + vignette, all non-interactive */
-.glass,
-.scanlines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-.glass {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 22%, transparent 42%),
-    radial-gradient(ellipse 75% 45% at 30% -12%, rgba(255, 255, 255, 0.13), transparent 70%);
-  mix-blend-mode: screen;
-  opacity: 0.65;
-}
-
-.scanlines {
-  background:
-    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.26) 0 1px, transparent 1px 3px),
-    radial-gradient(ellipse 78% 78% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
-}
-
-/* ----------------------------------------------------------------- overlay - */
-
-.overlay {
+#overlay {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
-  background: radial-gradient(ellipse at 50% 50%, rgba(10, 6, 4, 0.72), rgba(5, 3, 2, 0.9));
-  transition: opacity 220ms ease;
-  z-index: 3;
+  place-content: center;
+  gap: 0.6rem;
+  background: rgba(8, 6, 5, 0.78);
+  backdrop-filter: blur(2px);
+  transition: opacity 160ms ease;
 }
 
-.overlay.hidden {
+#overlay.hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-.insert {
-  display: grid;
-  gap: 0.3rem;
-  justify-items: center;
-  padding: 0.9rem 1.9rem;
+#start {
+  padding: 0.75rem 1.6rem;
   font: inherit;
-  color: #fff4e2;
-  background: linear-gradient(180deg, #e2541c, #a81f04);
-  border: 1px solid #ff9a5a;
-  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--red);
+  border: 0;
+  border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 5px 0 #5e1002, 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 26px rgba(255, 100, 40, 0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  animation: insert-pulse 1.9s ease-in-out infinite;
+  box-shadow: 0 4px 0 #7a1a00;
 }
 
-.insert-top { font-weight: 800; font-size: 1.05rem; }
-.insert-sub { font-size: 0.62rem; letter-spacing: 0.12em; color: rgba(255, 236, 214, 0.85); }
+#start:hover { background: var(--red-bright); }
+#start:active { transform: translateY(2px); box-shadow: 0 2px 0 #7a1a00; }
 
-.insert:active { transform: translateY(2px); box-shadow: 0 3px 0 #5e1002; }
+.hint { margin: 0; color: var(--dim); font-size: 0.85rem; }
 
-@keyframes insert-pulse {
-  0%, 100% { box-shadow: 0 5px 0 #5e1002, 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 18px rgba(255, 100, 40, 0.28); }
-  50% { box-shadow: 0 5px 0 #5e1002, 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 130, 60, 0.55); }
-}
-
-/* --------------------------------------------------------- control panel --- */
-
-.panel {
-  margin-top: 0.7rem;
-  padding: 0.55rem clamp(0.5rem, 1.6vw, 1rem) 0.75rem;
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, #241a15, var(--panel) 30%, #150f0c);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 200, 160, 0.14),
-    inset 0 -14px 26px rgba(0, 0, 0, 0.65),
-    0 0 0 1px #2d211b;
-}
-
-.panel-top {
+.controls {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0 0.2rem 0.4rem;
-  border-bottom: 1px solid rgba(255, 180, 120, 0.10);
+  align-items: center;
+  gap: 1rem;
+  margin: 1.1rem auto 0.4rem;
+  max-width: 34rem;
+  touch-action: none;
+  user-select: none;
 }
 
-.plate {
-  font-size: 0.6rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--gold);
-  text-shadow: 0 0 10px rgba(240, 180, 90, 0.4);
+.dpad {
+  display: grid;
+  grid-template: repeat(3, 2.6rem) / repeat(3, 2.6rem);
+  gap: 0.2rem;
 }
 
-.plate-keys {
-  font-size: 0.66rem;
+.pad, .round, .pill {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid #352c27;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.pad:active, .round:active, .pill:active { background: #332822; }
+
+.up    { grid-area: 1 / 2; }
+.left  { grid-area: 2 / 1; }
+.right { grid-area: 2 / 3; }
+.down  { grid-area: 3 / 2; }
+
+.buttons {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.round {
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  background: #7a1a00;
+  border-color: #a32b08;
+}
+
+.pill { padding: 0.45rem 0.9rem; border-radius: 999px; font-size: 0.85rem; }
+
+.keys {
+  margin: 0.6rem auto 0;
   color: var(--dim);
-  letter-spacing: 0.02em;
+  font-size: 0.85rem;
 }
 
 kbd {
-  padding: 0.03rem 0.3rem;
-  border: 1px solid #45362d;
-  border-bottom-width: 2px;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid #3a302b;
   border-radius: 4px;
-  background: #1b1411;
-  color: #d8c8b8;
+  background: #221d1a;
   font: inherit;
-  font-size: 0.62rem;
+  font-size: 0.8rem;
 }
 
-.panel-deck {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: clamp(0.6rem, 3vw, 2rem);
-  padding: 0.75rem 0.4rem 0.35rem;
+footer {
+  margin-top: 1.8rem;
+  color: var(--dim);
+  font-size: 0.78rem;
 }
 
-/* joystick */
+footer p { margin: 0.4rem 0; }
 
-.stick-slot { display: grid; place-items: center; }
+#status { color: #6f655d; font-variant-numeric: tabular-nums; }
 
-.stick {
-  position: relative;
-  width: clamp(5.2rem, 18vw, 6.4rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 42%, #2b201a 0%, #17100d 62%, #0b0807 100%);
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.9),
-    inset 0 -2px 0 rgba(255, 190, 140, 0.10),
-    0 1px 0 rgba(255, 190, 140, 0.12);
-  touch-action: none;
-  cursor: grab;
-}
-
-.stick.dragging { cursor: grabbing; }
-
-.stick-gate {
-  position: absolute;
-  inset: 22%;
-  border-radius: 50%;
-  border: 1px dashed rgba(255, 170, 110, 0.14);
-}
-
-.stick-shaft {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 10px;
-  height: 26px;
-  margin-left: -5px;
-  margin-top: -20px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #120c0a, #3a2a22 45%, #120c0a);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
-}
-
-.stick-ball {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 44%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, #ff8a6a, var(--red-lit) 38%, #8c1c04 78%, #4d0e01);
-  box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.6),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.45),
-    inset 0 3px 6px rgba(255, 210, 180, 0.35);
-  transition: transform 90ms ease-out;
-  will-change: transform;
-}
-
-/* arcade buttons */
-
-.button-slot {
-  display: flex;
-  justify-content: center;
-  gap: clamp(0.7rem, 3vw, 1.6rem);
-}
-
-.arcade-button {
-  position: relative;
-  width: clamp(3.1rem, 11vw, 3.9rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 800;
-  font-size: clamp(0.8rem, 2.4vw, 1rem);
-  letter-spacing: 0.06em;
-  color: rgba(255, 245, 232, 0.92);
-  background: radial-gradient(circle at 36% 28%, #ff8a5a, var(--red) 46%, #8d1a03 80%);
-  box-shadow:
-    0 0 0 5px #100b09,
-    0 0 0 6px #33241d,
-    0 8px 0 #3a0f01,
-    0 12px 18px rgba(0, 0, 0, 0.6),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.45),
-    inset 0 5px 10px rgba(255, 220, 190, 0.4);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-  transition: transform 60ms ease, box-shadow 60ms ease;
-  touch-action: none;
-}
-
-.arcade-button.b {
-  background: radial-gradient(circle at 36% 28%, #6b6058, #2e2723 48%, #14100e 82%);
-  color: rgba(255, 240, 225, 0.85);
-}
-
-.arcade-button:active,
-.arcade-button.pressed {
-  transform: translateY(4px);
-  box-shadow:
-    0 0 0 5px #100b09,
-    0 0 0 6px #33241d,
-    0 4px 0 #3a0f01,
-    0 7px 12px rgba(0, 0, 0, 0.6),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.5),
-    inset 0 4px 8px rgba(255, 220, 190, 0.3);
-}
-
-/* system buttons + credit display */
-
-.system-slot {
-  display: grid;
-  gap: 0.35rem;
-  justify-items: end;
-}
-
-.sys-button {
-  min-width: 5.4rem;
-  padding: 0.28rem 0.7rem;
-  font: inherit;
-  font-size: 0.62rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--cream);
-  background: linear-gradient(180deg, #34271f, #1a1310);
-  border: 1px solid #453429;
-  border-radius: 4px;
-  cursor: pointer;
-  box-shadow: 0 3px 0 #0d0908, inset 0 1px 0 rgba(255, 200, 160, 0.16);
-  touch-action: none;
-}
-
-.sys-button:active { transform: translateY(2px); box-shadow: 0 1px 0 #0d0908; }
-
-.credit {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.62rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #ff7a3c;
-  text-shadow: 0 0 10px rgba(255, 110, 50, 0.55);
-}
-
-/* --------------------------------------------------------------- coin door */
-
-.coin-door {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  margin: 0.8rem auto 0;
-  padding: 0.5rem 1rem;
-  width: min(100%, 20rem);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #221a16, #120d0b);
-  box-shadow: inset 0 0 0 1px #33251e, 0 6px 16px rgba(0, 0, 0, 0.5);
-}
-
-.coin-slot {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.slot-mouth {
-  display: block;
-  width: 9px;
-  height: 2.1rem;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #000 0 55%, #3b2a22 100%);
-  box-shadow: inset 0 0 0 1px #5a4436, 0 0 0 3px #0b0807, 0 0 12px rgba(0, 0, 0, 0.9);
-}
-
-/* the coin-return flap next to the slot */
-.coin-slot::after {
-  content: "";
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #2a1f19, #120d0b);
-  box-shadow: inset 0 0 0 1px #45332a, inset 0 6px 10px rgba(0, 0, 0, 0.8);
-  order: -1;
-}
-
-.slot-led {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ff9a3c;
-  box-shadow: 0 0 10px #ff7a2a;
-  animation: insert-pulse 1.9s ease-in-out infinite;
-}
-
-.slot-led.playing {
-  background: #63e06a;
-  box-shadow: 0 0 10px #48d05a;
-  animation: none;
-}
-
-.coin-label {
-  margin: 0;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.66rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: #ffb070;
-  text-shadow: 0 0 12px rgba(255, 140, 60, 0.5);
-}
-
-.coin-label.playing { color: #8be08e; text-shadow: 0 0 12px rgba(90, 220, 110, 0.35); }
-
-/* ---------------------------------------------------------------- footer -- */
-
-.cab-footer {
-  margin-top: 0.9rem;
-  text-align: center;
-  font-size: 0.68rem;
-  color: #8b7a6b;
-}
-
-.cab-footer p { margin: 0.3rem 0; }
-.cab-footer a { color: #e0602c; text-decoration: none; }
-.cab-footer a:hover { text-decoration: underline; }
-.dot { opacity: 0.4; }
-
-.fine {
-  max-width: 34rem;
-  margin: 0.3rem auto 0;
-  font-size: 0.62rem;
-  line-height: 1.45;
-  color: #6f6055;
-}
-
-#status { color: #5c4f46; font-variant-numeric: tabular-nums; }
-
-/* ---------------------------------------------------------------- mobile -- */
-
-@media (max-width: 46rem) {
-  .bezel { grid-template-columns: 1fr; }
-  .speaker { display: none; }
-  .panel-top .plate-keys { display: none; }
-  .panel-deck {
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      "stick buttons"
-      "system system";
-    gap: 0.7rem;
-  }
-  .stick-slot { grid-area: stick; }
-  .button-slot { grid-area: buttons; }
-  .system-slot { grid-area: system; grid-auto-flow: column; justify-content: end; align-items: center; }
-  .cab-footer .fine { font-size: 0.58rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .marquee-leds span,
-  .insert,
-  .slot-led { animation: none; }
-  .stick-ball { transition: none; }
+@media (max-width: 30rem) {
+  .dpad { grid-template: repeat(3, 2.2rem) / repeat(3, 2.2rem); }
+  .round { width: 2.8rem; height: 2.8rem; }
+  .keys { display: none; }
 }

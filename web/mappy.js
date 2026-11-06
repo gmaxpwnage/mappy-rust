@@ -1,9 +1,9 @@
-// Browser frontend for the decompiled game, dressed as an arcade cabinet.
+// Browser frontend for the decompiled game.
 //
 // The wasm module exposes a tiny C ABI (see crates/mappy-web/src/lib.rs), so
 // this file is the whole "framework": it instantiates the module, paces the
-// game to the console's 60.0988 fps, copies the framebuffer into the CRT canvas
-// and pumps the APU's samples into the Web Audio graph.
+// game to the console's 60.0988 fps, copies the framebuffer into a canvas and
+// pumps the APU's samples into the Web Audio graph.
 
 'use strict';
 
@@ -34,9 +34,6 @@ const imageData = ctx.createImageData(WIDTH, HEIGHT);
 const overlay = document.getElementById('overlay');
 const startButton = document.getElementById('start');
 const statusLine = document.getElementById('status');
-const creditLine = document.getElementById('credit');
-const coinLabel = document.getElementById('coin-label');
-const coinLed = document.getElementById('coin-led');
 
 let wasm = null;
 let memory = null;
@@ -45,11 +42,10 @@ let padBits = 0;
 let frames = 0;
 let lastTime = 0;
 let accumulator = 0;
-let startSeen = false;
 
 // ---------------------------------------------------------------- audio ----
 
-// Samples arrive in bursts of ~735 per video frame and are consumed 1024 at a
+// Samples arrive in bursts of ~735 per video frame and are consumed 128 at a
 // time by the audio callback, so they are queued here.
 const audioQueue = { chunks: [], offset: 0, queued: 0 };
 const MAX_QUEUED_SECONDS = 0.5;
@@ -101,7 +97,9 @@ function startAudio() {
   // 1024 frames is ~21 ms at 48 kHz: low latency without audible crackle.
   const node = audioContext.createScriptProcessor(1024, 1, 1);
   node.onaudioprocess = (event) => {
-    pullAudio(event.outputBuffer.getChannelData(0));
+    const out = event.outputBuffer.getChannelData(0);
+    pullAudio(out);
+    // The buffer is mono; the graph up-mixes to stereo.
   };
   node.connect(audioContext.destination);
 }
@@ -146,16 +144,10 @@ function loop(now) {
   if (accumulator > FRAME_MS * MAX_CATCH_UP) accumulator = 0; // resync after a stall
   if (!due) return;
 
-  if (!startSeen && (padBits & BUTTONS.start) !== 0) {
-    startSeen = true;
-    coinLabel.textContent = 'playing';
-  }
-
   draw();
   pumpAudio();
   if (frames % 30 === 0) {
-    statusLine.textContent =
-      `${frames} frames · ${(wasm.mappy_frame_count() / FPS).toFixed(1)} s of game time`;
+    statusLine.textContent = `frame ${frames} · ${(wasm.mappy_frame_count() / FPS).toFixed(1)} s of game time`;
   }
 }
 
@@ -182,7 +174,6 @@ window.addEventListener('keydown', (event) => {
   event.preventDefault();
   setBit(bit, true);
   if (audioContext && audioContext.state === 'suspended') audioContext.resume();
-  if (!running) begin(); // Enter drops a coin, like the real thing
 });
 
 window.addEventListener('keyup', (event) => {
@@ -192,12 +183,9 @@ window.addEventListener('keyup', (event) => {
   setBit(bit, false);
 });
 
-window.addEventListener('blur', () => {
-  padBits = 0;
-  releaseStick();
-});
+window.addEventListener('blur', () => { padBits = 0; });
 
-// Arcade buttons (A, B, Select, Start).
+// On-screen buttons for touch and mouse.
 for (const element of document.querySelectorAll('[data-btn]')) {
   const name = element.dataset.btn;
   const bit = BUTTONS[name === 'start2' ? 'start' : name];
@@ -205,13 +193,11 @@ for (const element of document.querySelectorAll('[data-btn]')) {
   const press = (event) => {
     event.preventDefault();
     setBit(bit, true);
-    element.classList.add('pressed');
     element.setPointerCapture?.(event.pointerId);
   };
   const release = (event) => {
     event.preventDefault();
     setBit(bit, false);
-    element.classList.remove('pressed');
   };
   element.addEventListener('pointerdown', press);
   element.addEventListener('pointerup', release);
@@ -220,71 +206,7 @@ for (const element of document.querySelectorAll('[data-btn]')) {
   element.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 
-// Joystick: drag the ball, or use the arrow keys. The gate is a circle, so an
-// off-centre drag can hold two directions at once (diagonals).
-const stick = document.getElementById('stick');
-const stickBall = document.getElementById('stick-ball');
-let stickPointer = null;
-
-function applyStick(clientX, clientY) {
-  const rect = stick.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  let dx = clientX - cx;
-  let dy = clientY - cy;
-  const len = Math.hypot(dx, dy);
-  const max = rect.width * 0.24; // travel of the ball, in px
-  if (len > max) {
-    dx = (dx / len) * max;
-    dy = (dy / len) * max;
-  }
-  stickBall.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-  const dead = max * 0.38;
-  setBit(BUTTONS.left, dx < -dead);
-  setBit(BUTTONS.right, dx > dead);
-  setBit(BUTTONS.up, dy < -dead);
-  setBit(BUTTONS.down, dy > dead);
-}
-
-function releaseStick() {
-  stickPointer = null;
-  stick.classList.remove('dragging');
-  stickBall.style.transform = 'translate(-50%, -50%)';
-  for (const dir of ['up', 'down', 'left', 'right']) setBit(BUTTONS[dir], false);
-}
-
-stick.addEventListener('pointerdown', (event) => {
-  event.preventDefault();
-  stickPointer = event.pointerId;
-  stick.setPointerCapture?.(event.pointerId);
-  stick.classList.add('dragging');
-  applyStick(event.clientX, event.clientY);
-});
-
-stick.addEventListener('pointermove', (event) => {
-  if (stickPointer !== event.pointerId) return;
-  event.preventDefault();
-  applyStick(event.clientX, event.clientY);
-});
-
-for (const type of ['pointerup', 'pointercancel']) {
-  stick.addEventListener(type, (event) => {
-    if (stickPointer === event.pointerId) releaseStick();
-  });
-}
-
 // ------------------------------------------------------------------ boot ---
-
-function markRunning() {
-  running = true;
-  overlay.classList.add('hidden');
-  coinLed.classList.add('playing');
-  coinLabel.classList.add('playing');
-  coinLabel.textContent = 'press start';
-  creditLine.textContent = 'credit 1';
-  lastTime = performance.now();
-  accumulator = 0;
-}
 
 function begin() {
   if (running) return;
@@ -293,9 +215,11 @@ function begin() {
   // (Re)create the machine at the AudioContext's real rate so nothing is
   // resampled on the way out.
   wasm.mappy_init(sampleRate);
-  draw(); // show frame 0 straight away instead of a blank CRT
-  markRunning();
-  startSeen = false;
+  draw(); // show frame 0 straight away instead of a blank canvas
+  running = true;
+  overlay.classList.add('hidden');
+  lastTime = performance.now();
+  accumulator = 0;
   requestAnimationFrame(loop);
 }
 
@@ -303,7 +227,8 @@ startButton.addEventListener('click', begin);
 
 // `?autostart` is the screenshot/testing path: load the module synchronously
 // (so the game is already drawn when the page's load event fires) and run a
-// couple of seconds of frames. Normal visitors use the async path below.
+// couple of seconds of frames. Normal visitors go through the async path and
+// the "Click to play" button.
 function bootSynchronously() {
   // Synchronous XHR cannot use responseType, so read the bytes through the
   // classic binary-string trick.
@@ -321,10 +246,12 @@ function bootSynchronously() {
   wasm.mappy_init(sampleRate);
   for (let i = 0; i < 150; i++) wasm.mappy_run_frame();
   draw();
-  markRunning();
+  running = true;
+  overlay.classList.add('hidden');
   overlay.style.display = 'none'; // no fade when capturing a screenshot
-  statusLine.textContent = `frame ${wasm.mappy_frame_count()} (autostart)`;
+  lastTime = performance.now();
   requestAnimationFrame(loop);
+  statusLine.textContent = `frame ${wasm.mappy_frame_count()} (autostart)`;
 }
 
 (async function boot() {
@@ -349,10 +276,10 @@ function bootSynchronously() {
     memory = wasm.memory;
     if (!memory) throw new Error('module exports no memory');
   } catch (err) {
-    statusLine.textContent = `could not load mappy.wasm: ${err.message}`;
+    statusLine.textContent = `Could not load mappy.wasm: ${err.message}`;
     console.error(err);
     return;
   }
-  statusLine.textContent = 'wasm ready — insert coin';
+  statusLine.textContent = 'WebAssembly ready — click to play';
   if (autostart) begin();
 })();

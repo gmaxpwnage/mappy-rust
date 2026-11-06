@@ -37,13 +37,10 @@ plays the game natively on Linux, macOS and Windows.
 ## Play in the browser
 
 **<https://gmaxpwnage.github.io/mappy-rust/>** — the same Rust code compiled to
-WebAssembly, dressed as an upright arcade cabinet: marquee, CRT bezel with
-scanlines, a draggable joystick and A/B buttons on the control panel, a coin
-door that lights up when the game starts.
-
-No emulator loop and no bindings layer: `crates/mappy-web` exports nine
-`extern "C"` functions and `web/mappy.js` is the entire frontend (canvas,
-keyboard/touch input, Web Audio). Keys are the same as the native build.
+WebAssembly, no emulator loop and no bindings layer: `crates/mappy-web` exports
+nine `extern "C"` functions and `web/mappy.js` is the entire frontend (canvas,
+keyboard/touch input, Web Audio). Keys are the same as the native build, and
+there are on-screen buttons for touch devices.
 
 The wasm build is byte-for-byte the same game logic as the native one: after
 150 frames its framebuffer is pixel-identical to `mappy headless`'s.

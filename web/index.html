@@ -3,104 +3,60 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mappy — decompiled to Rust, playable in WebAssembly</title>
+<title>Mappy — decompiled to Rust, running in WebAssembly</title>
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23c82800'/><rect x='3' y='5' width='4' height='6' fill='%23f5e6c8'/><rect x='9' y='5' width='4' height='6' fill='%23f5e6c8'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23c82800'/><rect x='3' y='5' width='4' height='6' fill='%23fcfcfc'/><rect x='9' y='5' width='4' height='6' fill='%23fcfcfc'/></svg>">
 </head>
 <body>
-<div class="room">
-  <div class="cabinet">
+<main>
+  <header>
+    <h1>Mappy</h1>
+    <p class="sub">
+      The 1984 NES cartridge decompiled into Rust — 16&nbsp;384 generated
+      functions, no emulator loop — compiled to WebAssembly.
+      <a href="https://github.com/gmaxpwnage/mappy-rust">Source &amp; notes</a>
+    </p>
+  </header>
 
-    <!-- ---------------------------------------------------------- marquee -->
-    <header class="marquee">
-      <div class="marquee-panel">
-        <h1 class="logo">Mappy</h1>
-        <p class="tagline">decompiled&nbsp;to&nbsp;rust · 16&nbsp;384&nbsp;functions · wasm</p>
-      </div>
-      <div class="marquee-leds" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-    </header>
-
-    <!-- ------------------------------------------------------------ bezel -->
-    <div class="bezel">
-      <div class="speaker" aria-hidden="true"></div>
-
-      <div class="screen">
-        <div class="crt">
-          <canvas id="screen" width="256" height="240" aria-label="Mappy game screen"></canvas>
-          <div class="glass" aria-hidden="true"></div>
-          <div class="scanlines" aria-hidden="true"></div>
-          <div class="overlay" id="overlay">
-            <button id="start" class="insert">
-              <span class="insert-top">Insert coin</span>
-              <span class="insert-sub">click or press Enter · sound on</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="speaker" aria-hidden="true"></div>
+  <div id="stage">
+    <canvas id="screen" width="256" height="240"></canvas>
+    <div id="overlay">
+      <button id="start">Click to play</button>
+      <p class="hint">Sound starts after a click — browsers require it.</p>
     </div>
-
-    <!-- ---------------------------------------------------- control panel -->
-    <div class="panel">
-      <div class="panel-top">
-        <span class="plate">player 1</span>
-        <span class="plate-keys">
-          arrows / <kbd>WASD</kbd> move · <kbd>Z</kbd> A · <kbd>X</kbd> B ·
-          <kbd>Enter</kbd> start · <kbd>Shift</kbd> select
-        </span>
-      </div>
-
-      <div class="panel-deck">
-        <div class="stick-slot">
-          <div class="stick" id="stick" role="group" aria-label="Joystick, drag or use the arrow keys">
-            <div class="stick-gate" aria-hidden="true"></div>
-            <div class="stick-shaft" aria-hidden="true"></div>
-            <div class="stick-ball" id="stick-ball"></div>
-          </div>
-        </div>
-
-        <div class="button-slot">
-          <button class="arcade-button b" data-btn="b" aria-label="Button B">B</button>
-          <button class="arcade-button a" data-btn="a" aria-label="Button A">A</button>
-        </div>
-
-        <div class="system-slot">
-          <button class="sys-button" data-btn="select" aria-label="Select">Select</button>
-          <button class="sys-button" data-btn="start2" aria-label="Start">Start</button>
-          <span class="credit" id="credit">credit 0</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- --------------------------------------------------------- coin door -->
-    <div class="coin-door">
-      <div class="coin-slot">
-        <span class="slot-mouth" aria-hidden="true"></span>
-        <span class="slot-led" id="coin-led" aria-hidden="true"></span>
-      </div>
-      <p class="coin-label" id="coin-label">insert coin</p>
-    </div>
-
-    <!-- ------------------------------------------------------------ footer -->
-    <footer class="cab-footer">
-      <p>
-        <a href="https://github.com/gmaxpwnage/mappy-rust">source &amp; reverse-engineering notes</a>
-        <span class="dot">·</span>
-        <a href="https://github.com/gmaxpwnage/mappy-rust/releases">native builds</a>
-        <span class="dot">·</span>
-        <a href="https://github.com/gmaxpwnage/mappy-rust/blob/main/NOTICE">notice</a>
-      </p>
-      <p class="fine">
-        Mappy is © 1983, 1984 Namco Ltd. Technical demonstration for personal,
-        non-commercial use; the cartridge data is included only so the
-        decompiled program can run. <span id="status">loading wasm…</span>
-      </p>
-    </footer>
   </div>
-</div>
+
+  <section class="controls">
+    <div class="dpad">
+      <button class="pad up"    data-btn="up"    aria-label="Up">▲</button>
+      <button class="pad left"  data-btn="left"  aria-label="Left">◀</button>
+      <button class="pad right" data-btn="right" aria-label="Right">▶</button>
+      <button class="pad down"  data-btn="down"  aria-label="Down">▼</button>
+    </div>
+    <div class="buttons">
+      <button class="round" data-btn="b" aria-label="B">B</button>
+      <button class="round" data-btn="a" aria-label="A">A</button>
+      <button class="pill"  data-btn="select" aria-label="Select">Select</button>
+      <button class="pill"  data-btn="start2" aria-label="Start">Start</button>
+    </div>
+  </section>
+
+  <p class="keys">
+    Keys: arrows / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ·
+    <kbd>Z</kbd> A · <kbd>X</kbd> B · <kbd>Enter</kbd> start/pause ·
+    <kbd>Shift</kbd> select
+  </p>
+
+  <footer>
+    <p>
+      Mappy is © 1983, 1984 Namco Ltd. This page is a technical demonstration
+      for personal, non-commercial use; the cartridge data is included only so
+      the decompiled program can run. See the
+      <a href="https://github.com/gmaxpwnage/mappy-rust/blob/main/NOTICE">NOTICE</a>.
+    </p>
+    <p id="status">Loading WebAssembly…</p>
+  </footer>
+</main>
 <script src="mappy.js"></script>
 </body>
 </html>
