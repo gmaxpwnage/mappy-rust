@@ -58,7 +58,7 @@ fn usage() {
         "mappy — the decompiled Mappy
 
 USAGE:
-    mappy play      [--scale N] [--no-audio] [--input SCRIPT]   window + sound
+    mappy play      [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
     mappy headless  [--frames N] [--every N] [--outdir DIR] [--input SCRIPT]
     mappy trace     [--frames N] [--input SCRIPT] [--out FILE]
     mappy diff      [--rom PATH] [--frames N] [--input SCRIPT]
@@ -68,7 +68,10 @@ USAGE:
     mappy bench     [--frames N]
 
 `play` runs the decompiled game and needs no ROM file: the cartridge data is
-compiled into the binary. The other commands use `--rom` (default
+compiled into the binary. Its game loop is locked to the console's frame rate
+(60.0988 fps NTSC, override with --fps) and is paced against the wall clock, so
+game speed never depends on how fast the host is. --stats prints the measured
+frame rate once a second. The other commands use `--rom` (default
 rom/mappy.nes) with the reference interpreter, for analysis and testing.
 
 INPUT SCRIPT: comma separated `BUTTONS@START-END`, e.g.
@@ -92,6 +95,8 @@ struct Opts {
     watch_ram: Option<u16>,
     region: Option<(u32, u32, u32, u32)>,
     decompiled: bool,
+    fps: f64,
+    stats: bool,
 }
 
 impl Opts {
@@ -111,6 +116,8 @@ impl Opts {
             watch_ram: None,
             region: None,
             decompiled: true,
+            fps: 60.0988,
+            stats: false,
         };
         let mut i = 0;
         while i < args.len() {
@@ -169,6 +176,14 @@ impl Opts {
                     let hi = u16::from_str_radix(b.trim_start_matches("0x"), 16).unwrap_or(0xFFFF);
                     o.pc_range = Some((lo, hi));
                     i += 2;
+                }
+                "--fps" => {
+                    o.fps = need(i).parse().unwrap_or(60.0988);
+                    i += 2;
+                }
+                "--stats" => {
+                    o.stats = true;
+                    i += 1;
                 }
                 "--engine" => {
                     let v = need(i);
@@ -242,6 +257,13 @@ fn headless(o: &mut Opts) {
         }
     }
     let elapsed = started.elapsed().as_secs_f64();
+    let total = if o.decompiled { game.machine.total_cycles } else { m.total_cycles };
+    println!(
+        "{} frames, {total} machine cycles ({:.2} per frame, PPU dots/frame {:.1})",
+        o.frames,
+        total as f64 / o.frames as f64,
+        3.0 * total as f64 / o.frames as f64
+    );
     if o.decompiled {
         println!(
             "{} frames in {:.3}s = {:.0} fps (decompiled engine, single thread)",
@@ -253,7 +275,12 @@ fn headless(o: &mut Opts) {
     let samples = if o.decompiled { game.take_audio() } else { m.apu.drain_samples() };
     if !samples.is_empty() {
         let path = format!("{}/audio.wav", o.outdir.display());
-        write_wav(&path, &samples, nes::apu::SAMPLE_RATE as u32);
+        let rate = if o.decompiled {
+            game.machine.apu.sample_rate() as u32
+        } else {
+            m.apu.sample_rate() as u32
+        };
+        write_wav(&path, &samples, rate);
         println!("wrote {path} ({} samples)", samples.len());
     }
 }

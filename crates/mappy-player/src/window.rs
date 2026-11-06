@@ -3,6 +3,15 @@
 //! Cross-platform by construction: winit abstracts the window system, so the
 //! same code runs on Linux (X11/Wayland), macOS, Windows and more. Audio is
 //! optional at build time (`--no-default-features --features gui`).
+//!
+//! # Frame pacing
+//!
+//! Mappy's game logic is driven by the console's vblank interrupt: one frame of
+//! game time is one NMI, i.e. one 341x262-dot PPU frame. The frontend therefore
+//! advances the machine by *whole frames* against the wall clock, at the
+//! console's own rate (60.0988 Hz NTSC), and never by "however fast the CPU
+//! happens to run". Emulation speed and game speed are decoupled: the engine
+//! could render ~850 frames/s, but the game still runs at 60.
 
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
@@ -21,15 +30,35 @@ use crate::Opts;
 const NES_W: usize = 256;
 const NES_H: usize = 240;
 
+/// NTSC NES frame rate: 1.789773 MHz / (341 dots x 262 lines / 3 dots per CPU
+/// cycle) = 60.0988 Hz. `--fps` can override it (e.g. `--fps 60`).
+const NTSC_FPS: f64 = 60.0988;
+
+/// Never try to catch up more than this many frames in one wake-up; beyond it
+/// the clock is re-based instead, so a stalled window cannot fast-forward the
+/// game.
+const MAX_CATCHUP_FRAMES: u32 = 3;
+
 pub fn run(opts: &mut Opts) {
     let game = mappy_rom::Mappy::new();
     let script = crate::input::InputScript::parse(&opts.script).unwrap_or_default();
     let auto_input = !opts.script.is_empty();
-    let audio: Option<AudioOut> = if opts.audio {
-        AudioOut::new()
-    } else {
-        None
-    };
+    let audio: Option<AudioOut> = if opts.audio { AudioOut::new() } else { None };
+    let mut game = game;
+    // Synthesise audio at the rate the device actually wants, so nothing has
+    // to be resampled (and the pitch/tempo stay exactly right).
+    if let Some(a) = &audio {
+        game.machine.apu.set_sample_rate(a.sample_rate() as f64);
+        if opts.stats {
+            eprintln!(
+                "audio: {} Hz, {} channel(s), {}",
+                a.sample_rate(),
+                a.channels(),
+                a.sample_format()
+            );
+        }
+    }
+    let fps = if opts.fps > 1.0 { opts.fps } else { NTSC_FPS };
     let mut app = App {
         game,
         scale: opts.scale.max(1) as usize,
@@ -37,15 +66,23 @@ pub fn run(opts: &mut Opts) {
         surface: None,
         context: None,
         audio,
-        next_frame: Instant::now(),
-        frames_due: 0.0f64,
-        last_audio_drain: Instant::now(),
+        fps,
+        frame_duration: Duration::from_secs_f64(1.0 / fps),
+        next_deadline: Instant::now(),
+        catch_up: false,
         script,
         auto_input,
         frame: 0,
+        stats: opts.stats,
+        stats_frames: 0,
+        stats_since: Instant::now(),
+        stats_rendered: 0,
     };
+    if opts.stats {
+        eprintln!("pacing: locked to {fps:.4} frames/s ({:.2} ms/frame)", 1000.0 / fps);
+    }
     let event_loop = EventLoop::new().expect("create event loop");
-    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.set_control_flow(ControlFlow::WaitUntil(app.next_deadline));
     event_loop.run_app(&mut app).expect("run event loop");
 }
 
@@ -56,13 +93,23 @@ struct App {
     surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
     context: Option<softbuffer::Context<Arc<Window>>>,
     audio: Option<AudioOut>,
-    next_frame: Instant,
-    frames_due: f64,
-    last_audio_drain: Instant,
+    /// Locked frame rate of the game loop, in frames per second.
+    fps: f64,
+    /// Wall-clock duration of one frame at that rate.
+    frame_duration: Duration,
+    /// Wall-clock time at which the next frame is due.
+    next_deadline: Instant,
+    /// Set while the loop is behind and catching up (diagnostics only).
+    catch_up: bool,
     /// Scripted input (see `--input`); when non-empty it drives player 1.
     script: crate::input::InputScript,
     auto_input: bool,
+    /// Frames of game time elapsed.
     frame: u32,
+    stats: bool,
+    stats_frames: u32,
+    stats_since: Instant,
+    stats_rendered: u32,
 }
 
 impl App {
@@ -105,31 +152,59 @@ impl App {
         buffer.present().expect("present");
     }
 
-    /// Advance the game by the wall-clock time elapsed, at 60.0988 Hz.
+    /// Run every game frame whose deadline has arrived, then present.
+    ///
+    /// The game advances in exact multiples of one PPU frame at the locked
+    /// rate; it never runs faster because the host is fast, and it falls
+    /// behind by at most [`MAX_CATCHUP_FRAMES`] before the clock is re-based.
     fn tick(&mut self) {
         let now = Instant::now();
-        if now < self.next_frame {
+        if now < self.next_deadline {
             return;
         }
-        let dt = now.duration_since(self.next_frame).as_secs_f64();
-        self.frames_due = (self.frames_due + dt * 60.0988 + 1.0).min(3.0);
-        self.next_frame = now;
-        let whole = self.frames_due.floor();
-        self.frames_due -= whole;
-        for _ in 0..(whole as u32) {
+        let mut due = 0u32;
+        while now >= self.next_deadline && due < MAX_CATCHUP_FRAMES {
+            self.next_deadline += self.frame_duration;
+            due += 1;
+        }
+        self.catch_up = now >= self.next_deadline;
+        if self.catch_up {
+            // Stalled for longer than the catch-up window (window drag, debug
+            // breakpoint, suspend): drop the lost time instead of spiralling.
+            self.next_deadline = now + self.frame_duration;
+        }
+
+        for _ in 0..due {
             if self.auto_input {
                 self.game.set_pad1(self.script.at(self.frame));
             }
             self.game.run_frame();
             self.frame = self.frame.wrapping_add(1);
         }
-        // Audio: keep the output queue fed.
+
+        // Audio: hand the samples produced by those frames to the device.
         let samples = self.game.take_audio();
         if let Some(a) = &self.audio {
             a.push(&samples);
         }
-        self.last_audio_drain = now;
+
         self.present();
+        self.stats_frames += due;
+        self.stats_rendered += 1;
+        if self.stats && self.stats_since.elapsed() >= Duration::from_secs(1) {
+            let secs = self.stats_since.elapsed().as_secs_f64();
+            let fps = self.stats_frames as f64 / secs;
+            eprintln!(
+                "game frame {:>7}: {fps:6.2} fps (target {:.2}), queue {:>5} samples{}",
+                self.frame,
+                self.fps,
+                self.audio.as_ref().map(|a| a.queued()).unwrap_or(0),
+                if self.catch_up { ", catching up" } else { "" }
+            );
+            self.stats_frames = 0;
+            self.stats_rendered = 0;
+            self.stats_since = Instant::now();
+        }
     }
 
     fn set_button(&mut self, key: KeyCode, pressed: bool) {
@@ -167,7 +242,8 @@ impl ApplicationHandler for App {
             ));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         self.set_window(window);
-        self.next_frame = Instant::now();
+        self.next_deadline = Instant::now();
+        self.stats_since = Instant::now();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -188,13 +264,10 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Run any frames that are due, then sleep until the next deadline.
         self.tick();
-        if let Some(w) = &self.window {
-            w.request_redraw();
-        }
-        // ~1 ms sleep keeps the loop from spinning a core while staying smooth.
-        std::thread::sleep(Duration::from_millis(1));
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_deadline));
     }
 }
 
@@ -205,6 +278,9 @@ impl ApplicationHandler for App {
 #[cfg(feature = "audio")]
 struct AudioOut {
     queue: Arc<Mutex<VecDeque<f32>>>,
+    sample_rate: u32,
+    channels: u16,
+    format: &'static str,
     _stream: cpal::Stream,
 }
 
@@ -217,14 +293,25 @@ impl AudioOut {
         let supported = device.default_output_config().ok()?;
         let sample_format = supported.sample_format();
         let config: cpal::StreamConfig = supported.into();
+        let sample_rate = config.sample_rate.0;
+        let channels = config.channels;
         let queue: Arc<Mutex<VecDeque<f32>>> = Arc::new(Mutex::new(VecDeque::new()));
         let q = queue.clone();
+        let ch = channels as usize;
         let err_fn = |e| eprintln!("audio error: {e}");
         let stream = match sample_format {
             cpal::SampleFormat::F32 => device
                 .build_output_stream(
                     &config,
-                    move |data: &mut [f32], _| fill_f32(data, &q),
+                    move |data: &mut [f32], _| {
+                        let Ok(mut queue) = q.try_lock() else { return };
+                        for frame in data.chunks_mut(ch) {
+                            let s = queue.pop_front().unwrap_or(0.0);
+                            for out in frame.iter_mut() {
+                                *out = s;
+                            }
+                        }
+                    },
                     err_fn,
                     None,
                 )
@@ -233,10 +320,13 @@ impl AudioOut {
                 .build_output_stream(
                     &config,
                     move |data: &mut [i16], _| {
-                        let mut out = vec![0.0f32; data.len()];
-                        fill_f32(&mut out, &q);
-                        for (d, s) in data.iter_mut().zip(out) {
-                            *d = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
+                        let Ok(mut queue) = q.try_lock() else { return };
+                        for frame in data.chunks_mut(ch) {
+                            let s = queue.pop_front().unwrap_or(0.0);
+                            let v = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
+                            for out in frame.iter_mut() {
+                                *out = v;
+                            }
                         }
                     },
                     err_fn,
@@ -247,10 +337,13 @@ impl AudioOut {
                 .build_output_stream(
                     &config,
                     move |data: &mut [u16], _| {
-                        let mut out = vec![0.0f32; data.len()];
-                        fill_f32(&mut out, &q);
-                        for (d, s) in data.iter_mut().zip(out) {
-                            *d = ((s.clamp(-1.0, 1.0) * 0.5 + 0.5) * 65535.0) as u16;
+                        let Ok(mut queue) = q.try_lock() else { return };
+                        for frame in data.chunks_mut(ch) {
+                            let s = queue.pop_front().unwrap_or(0.0);
+                            let v = ((s.clamp(-1.0, 1.0) * 0.5 + 0.5) * 65535.0) as u16;
+                            for out in frame.iter_mut() {
+                                *out = v;
+                            }
                         }
                     },
                     err_fn,
@@ -260,28 +353,54 @@ impl AudioOut {
             _ => return None,
         };
         stream.play().ok()?;
-        Some(AudioOut { queue, _stream: stream })
+        Some(AudioOut {
+            queue,
+            sample_rate,
+            channels,
+            format: match sample_format {
+                cpal::SampleFormat::F32 => "f32",
+                cpal::SampleFormat::I16 => "i16",
+                cpal::SampleFormat::U16 => "u16",
+                _ => "?",
+            },
+            _stream: stream,
+        })
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    fn sample_format(&self) -> &'static str {
+        self.format
+    }
+
+    fn queued(&self) -> usize {
+        self.queue.try_lock().map(|q| q.len()).unwrap_or(0)
     }
 
     fn push(&self, samples: &[f32]) {
         if samples.is_empty() {
             return;
         }
-        let mut q = self.queue.lock().unwrap();
-        // Drop the oldest audio rather than growing without bound.
-        if q.len() > 44_100 {
-            let excess = q.len() - 44_100;
+        // Never block the game loop on the audio callback: if the device is
+        // not draining (suspended sink, stalled PipeWire/ALSA), drop this
+        // batch instead of freezing the game. Game speed wins over sound.
+        let Ok(mut q) = self.queue.try_lock() else {
+            return;
+        };
+        // Never let the queue grow past ~0.5 s: a little buffering absorbs
+        // scheduling jitter, more than that would just add latency.
+        let limit = (self.sample_rate as usize) / 2;
+        if q.len() > limit {
+            let excess = q.len() - limit;
             q.drain(..excess);
         }
         q.extend(samples.iter().copied());
-    }
-}
-
-#[cfg(feature = "audio")]
-fn fill_f32(data: &mut [f32], q: &Arc<Mutex<VecDeque<f32>>>) {
-    let mut queue = q.lock().unwrap();
-    for d in data.iter_mut() {
-        *d = queue.pop_front().unwrap_or(0.0);
     }
 }
 
@@ -293,6 +412,18 @@ struct AudioOut;
 impl AudioOut {
     fn new() -> Option<AudioOut> {
         None
+    }
+    fn sample_rate(&self) -> u32 {
+        nes::apu::SAMPLE_RATE as u32
+    }
+    fn channels(&self) -> u16 {
+        1
+    }
+    fn sample_format(&self) -> &'static str {
+        "none"
+    }
+    fn queued(&self) -> usize {
+        0
     }
     fn push(&self, _samples: &[f32]) {}
 }

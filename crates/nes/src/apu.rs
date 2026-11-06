@@ -318,7 +318,9 @@ pub struct Apu {
     frame_cycle: u64,
     frame_seq: Seq,
 
-    /// Resampling state.
+    /// Resampling state: fractional position of the next output sample.
+    sample_accum: f64,
+    /// CPU cycles accumulated in the current sample period (for averaging).
     sample_count: u32,
     /// Channel sums accumulated over the current output sample period.
     acc_pulse: u32,
@@ -329,6 +331,9 @@ pub struct Apu {
     /// hardware is AC-coupled, so remove the bias here too).
     dc_x: f32,
     dc_y: f32,
+    /// Output sample rate in Hz. The frontend sets this to whatever the audio
+    /// device wants; headless tools keep the default.
+    sample_rate: f64,
     pub samples: Vec<f32>,
 }
 
@@ -351,6 +356,7 @@ impl Apu {
             frame_irq: false,
             frame_cycle: 0,
             frame_seq: Seq::Step1,
+            sample_accum: 0.0,
             sample_count: 0,
             acc_pulse: 0,
             acc_triangle: 0,
@@ -358,8 +364,20 @@ impl Apu {
             acc_dmc: 0,
             dc_x: 0.0,
             dc_y: 0.0,
+            sample_rate: SAMPLE_RATE,
             samples: Vec::with_capacity(4096),
         }
+    }
+
+    /// Set the output sample rate (Hz). Must be called before running.
+    pub fn set_sample_rate(&mut self, hz: f64) {
+        if hz > 1000.0 {
+            self.sample_rate = hz;
+        }
+    }
+
+    pub fn sample_rate(&self) -> f64 {
+        self.sample_rate
     }
 
     pub fn write_register(&mut self, addr: u16, val: u8) {
@@ -613,7 +631,11 @@ impl Apu {
         self.acc_noise += self.noise.output() as u32;
         self.acc_dmc += self.dmc.output as u32;
         self.sample_count += 1;
-        if self.sample_count as f64 >= CPU_HZ / SAMPLE_RATE {
+        // Fractional accumulator: exactly `sample_rate` samples per second of
+        // CPU time on average, with no integer-rounding drift.
+        self.sample_accum += self.sample_rate / CPU_HZ;
+        if self.sample_accum >= 1.0 {
+            self.sample_accum -= 1.0;
             let n = self.sample_count as f32;
             let pulse = self.acc_pulse as f32 / n;
             let triangle = self.acc_triangle as f32 / n;

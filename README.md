@@ -69,7 +69,7 @@ against FCEUX.
 ### Options
 
 ```
-mappy play     [--scale N] [--no-audio] [--input SCRIPT]
+mappy play     [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
 mappy headless [--frames N] [--every N] [--outdir DIR] [--engine decompiled|interpreter]
 mappy trace    [--frames N] [--pc-range LO-HI] [--watch-ram ADDR]
 mappy diff     [--frames N] [--input SCRIPT]
@@ -129,7 +129,7 @@ structure of the original program.
 
 ## Verification
 
-Four independent layers, all runnable with `cargo test --release` plus the
+Five independent layers, all runnable with `cargo test --release` plus the
 commands below.
 
 1. **6502 correctness** — `mos6502` passes Klaus Dormann's full functional test
@@ -160,16 +160,45 @@ commands below.
    phase. During gameplay 1.8–2.1 % of pixels differ, which is the animation
    phase shift caused by FCEUX's one-frame input pipeline.
 
-4. **Game-level smoke test** — `--input "START@19-21"` must produce the
+4. **Audio timing** — `crates/nes/tests/apu_rate.rs` asserts the APU emits
+   exactly one second of samples per second of CPU time at any requested rate
+   (44.1 / 48 / 96 kHz) and ~734 samples per 60 Hz frame, so tempo and pitch
+   follow the console clock rather than the host's frame rate.
+
+5. **Game-level smoke test** — `--input "START@19-21"` must produce the
    `PLAYER 1 READY` screen and a live score, i.e. the game really starts,
    which the test asserts through the input-enable byte at `$040F`.
 
-Performance: the decompiled engine runs at about **900 frames per second**
-(~15× real time) on one core, including full PPU rendering and APU synthesis.
+### Frame pacing
+
+Mappy's game logic is vblank-driven: one frame of game time is one NMI, which
+is exactly one 341×262-dot PPU frame. The player therefore advances the machine
+by **whole frames, paced against the wall clock, at the console's own rate —
+60.0988 Hz NTSC** — and never by "however fast the host can run the
+translations". Emulation throughput and game speed are decoupled: the engine
+manages ~850 frames/s, and the game still runs at 60.
+
+* `--fps N` overrides the lock (e.g. `--fps 60`).
+* `--stats` prints the measured rate once per second, the audio queue depth,
+  and whether the loop had to catch up.
+* Up to 3 frames are caught up after a short stall; a longer stall (window
+  drag, suspend) re-bases the clock instead of fast-forwarding the game. This
+  also means the game *cannot* run slow on a busy machine — it simply drops
+  the missed frames.
+* Audio is synthesised at the output device's real sample rate (queried from
+  cpal), so nothing needs resampling and the pitch/tempo stay correct. Audio
+  pushes never block the game loop: if the sink stalls, samples are dropped
+  rather than freezing the game.
 
 ```sh
-mappy bench
+mappy play --stats          # verify the lock on your machine
+mappy bench                 # raw engine throughput, unthrottled
 ```
+
+Performance of the translations themselves: the decompiled engine runs at
+about **850–900 frames per second** (~15× real time) on one core, including
+full PPU rendering and APU synthesis. `headless`, `trace`, `diff` and `bench`
+are deliberately unthrottled so analysis runs as fast as possible.
 
 ## Layout
 
