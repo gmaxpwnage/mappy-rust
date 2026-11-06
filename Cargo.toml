@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mos6502",
+    "crates/nes",
+    "crates/mappy-rom",
+    "crates/decompiler",
+    "crates/mappy-player",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.70"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+# The decompiled ROM is ~16k tiny functions; keep debug builds usable.
+[profile.dev]
+opt-level = 1

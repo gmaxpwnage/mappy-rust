@@ -1,0 +1,8 @@
+[package]
+name = "mos6502"
+description = "Cycle-counted NMOS 6502 core and disassembler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

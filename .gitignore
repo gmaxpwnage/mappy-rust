@@ -1,0 +1,11 @@
+/target
+/shots
+/tmp
+*.trace
+# The cartridge image itself is copyrighted Namco material. Keep it out of
+# version control; the game's own crate embeds the extracted PRG/CHR it needs.
+/rom/*.nes
+# Klaus Dormann's GPL test suite is fetched on demand, never vendored.
+crates/mos6502/tests/data/*.bin
+__pycache__/
+*.pyc

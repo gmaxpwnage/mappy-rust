@@ -1,0 +1,247 @@
+# Mappy (Japan) (En) — decompiled to Rust
+
+The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
+code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
+plays the game natively on Linux, macOS and Windows.
+
+* **`crates/mappy-rom`** is the game: every 6502 instruction in the ROM,
+  translated to a Rust function (16 384 of them), calling into a Rust model of
+  the NES hardware. The cartridge data is embedded in the binary, so the result
+  is a self-contained native executable — no ROM file, no emulator loop over
+  opcodes.
+* **`crates/nes`** and **`crates/mos6502`** are the machine it runs on: a
+  dot-accurate PPU, a full APU, NROM cartridge mapping, and a cycle-counted
+  6502 that doubles as the reference implementation the translation is tested
+  against.
+* **`crates/decompiler`** performs the translation: it analyses the ROM,
+  annotates it, writes the annotated disassembly (`disassembly/mappy.asm`) and
+  generates the Rust source.
+
+```
+                 rom/mappy.nes
+                       │
+              ┌────────▼─────────┐
+              │    decompiler    │  static analysis + 6502→Rust translation
+              └───┬──────────┬───┘
+                  │          │
+   disassembly/mappy.asm   crates/mappy-rom/src/generated.rs
+      (annotated)              (16 384 Rust functions)
+                                  │
+                       ┌──────────▼──────────┐
+                       │  mappy (frontend)   │  winit window, cpal audio
+                       └─────────────────────┘  ⟵ runs the actual game
+```
+
+## Run it
+
+```sh
+cd ~/mappy
+
+# Option A: Nix (reproducible toolchain + window/audio libraries)
+nix develop
+cargo run --release -p mappy-player -- play
+
+# Option B: any Rust toolchain with a C linker (this machine's exact paths are
+# in toolchain.env, which also sets ALSA/X11/Wayland library paths)
+source toolchain.env
+cargo run --release -p mappy-player -- play
+```
+
+`play` needs no ROM path: the cartridge data is compiled into
+`mappy-rom` (`crates/mappy-rom/data/{prg,chr}.bin`, extracted from the image).
+
+### Controls
+
+| Key | NES pad |
+| --- | --- |
+| Arrow keys / `WASD` | D-pad |
+| `Z` or `K` or `Space` | A |
+| `X` or `J` | B |
+| `Enter` | Start (start game / pause) |
+| `Shift` or `Tab` | Select |
+| `Esc` | quit |
+
+On the title screen press **Enter**. Note that the original only samples a
+*fresh* press in the exact frame its title loop checks the pad, so if the first
+press seems ignored, press it again — that is the game's behaviour, confirmed
+against FCEUX.
+
+### Options
+
+```
+mappy play     [--scale N] [--no-audio] [--input SCRIPT]
+mappy headless [--frames N] [--every N] [--outdir DIR] [--engine decompiled|interpreter]
+mappy trace    [--frames N] [--pc-range LO-HI] [--watch-ram ADDR]
+mappy diff     [--frames N] [--input SCRIPT]
+mappy ram|nt|probe|bench ...
+```
+
+`--input` takes a script of scripted controller input, which is how the
+automated tests drive the game:
+
+```
+--input "START@40-43,RIGHT@90-260,A@270-285,LEFT@500-640"
+```
+
+## What "decompiled to Rust" means here
+
+The ROM is not interpreted at runtime. `decompiler` decodes the PRG image
+statically and emits, for **every** byte offset in the image, a Rust function
+that performs that one instruction against the machine and sets the program
+counter to wherever the instruction leads:
+
+```rust
+/// `$C031` — `SEI` — reset
+#[inline(never)]
+pub fn fn_reset(m: &mut Machine) {
+    m.cpu.add_cycles(2);
+    m.cpu.set_flag(FLAG_I, true);
+    m.cpu.pc = next_pc(m, 0x0032);
+}
+
+/// `$C07C` — `JSR $C0D0` — pause_sprites
+#[inline(never)]
+pub fn f_007c(m: &mut Machine) {
+    m.cpu.add_cycles(6);
+    let ret = next_pc(m, 0x007f) - 1;
+    m.push((ret >> 8) as u8);
+    m.push(ret as u8);
+    m.cpu.pc = 0xC0D0u16 /* pause_sprites */;
+}
+```
+
+Control flow is Rust calls; the dispatch table `DISPATCH[pc & 0x3FFF]` is the
+translation of the 6502's opcode fetch. All 151 documented instructions and the
+undocumented NMOS opcodes are handled, because a decompiler must be able to
+decode every byte of the image — including data that is never executed.
+
+Two things are *not* translated, and both are data rather than code:
+
+* the 8 KiB of CHR pattern tables (the game reads them through the PPU), and
+* the ROM's data tables (level layouts, palettes, text, Namco sound data),
+  which the translated code addresses exactly as the original did.
+
+On top of the mechanical translation, the code has been read and annotated:
+`symbols.txt` names the routines whose behaviour was confirmed (reset, NMI,
+controller decoding, the VRAM update queue, the title screen, the pause
+sprites, the APU engine, …), and `docs/DECOMPILATION.md` documents the
+structure of the original program.
+
+## Verification
+
+Four independent layers, all runnable with `cargo test --release` plus the
+commands below.
+
+1. **6502 correctness** — `mos6502` passes Klaus Dormann's full functional test
+   suite (all documented opcodes, every addressing mode, flag behaviour,
+   decimal mode, the `JMP ($xxFF)` page bug), 1.6 M instructions with no
+   deviation:
+
+   ```sh
+   tools/fetch_tests.sh   # the suite is GPL, so it is fetched, not vendored
+   cargo test --release -p mos6502
+   ```
+
+2. **Translation equivalence** — `crates/mappy-rom/tests/equivalence.rs` runs
+   the reference interpreter and the generated Rust *in lockstep* from the
+   same power-on state for 260 frames of scripted play, and compares registers,
+   cycle counts, RAM, PPU scroll registers, nametables and the framebuffer
+   after every single instruction. They must be identical, and are.
+
+   ```sh
+   cargo test --release -p mappy-rom
+   mappy diff --frames 500 --input "START@19-21,RIGHT@100-300"   # same, longer
+   ```
+
+3. **Hardware model vs a reference emulator** — frames rendered by this project
+   were compared against FCEUX 2.7 with the same palette and the same input
+   (`tools/compare_frames.py`). On the idle title screen only 370 of 57 344
+   pixels differ, all in one 8-pixel row: the "namcot" logo's palette-cycle
+   phase. During gameplay 1.8–2.1 % of pixels differ, which is the animation
+   phase shift caused by FCEUX's one-frame input pipeline.
+
+4. **Game-level smoke test** — `--input "START@19-21"` must produce the
+   `PLAYER 1 READY` screen and a live score, i.e. the game really starts,
+   which the test asserts through the input-enable byte at `$040F`.
+
+Performance: the decompiled engine runs at about **900 frames per second**
+(~15× real time) on one core, including full PPU rendering and APU synthesis.
+
+```sh
+mappy bench
+```
+
+## Layout
+
+```
+crates/mos6502/      6502 core: opcode matrix, interpreter, disassembler, tests
+crates/nes/          PPU, APU, cartridge, bus, controller; no platform deps
+crates/decompiler/   ROM analysis, listing writer, Rust code generator
+crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
+crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
+disassembly/mappy.asm  annotated disassembly (6.4 k lines)
+symbols.txt            names for the routines that have been identified
+docs/DECOMPILATION.md  what the original program does, routine by routine
+tools/                 opcode-table generator, FCEUX compare script, test fetch
+```
+
+## Regenerating the decompilation
+
+```sh
+source toolchain.env   # or: nix develop
+
+# Optional: record which addresses execute during a play session, which
+# recovers code reachable only through the game's computed jumps.
+cargo run --release -p mappy-player -- trace --frames 4000 \
+    --input "START@19-21,RIGHT@60-400,LEFT@410-700,A@740-760" --out /tmp/cov.txt
+
+cargo run --release -p decompiler -- rom/mappy.nes \
+    --asm disassembly/mappy.asm \
+    --rust crates/mappy-rom/src/generated.rs \
+    --data-dir crates/mappy-rom/data \
+    --symbols symbols.txt \
+    --coverage /tmp/cov.txt
+```
+
+Without `--coverage` the analysis only follows the entry points the 6502 can
+reach statically (16 vectors/branches/JSRs and their targets), which finds
+1 575 of the 9 878 code bytes: Mappy reaches a lot of its code through
+computed jumps. The translated Rust does not depend on that analysis — it
+covers all 16 384 offsets either way — but the listing does, which is why the
+trace step exists.
+
+## Cross-platform notes
+
+`mos6502`, `nes`, `mappy-rom` and `decompiler` contain no platform-specific
+code: no threads, no I/O, no graphics APIs. Only `mappy-player` touches the
+outside world, through `winit` (window + keyboard, X11/Wayland/macOS/Windows)
+and `cpal` (audio, optional feature). A headless build is one command:
+
+```sh
+cargo run --release -p mappy-player --no-default-features -- headless
+```
+
+The generated code uses only stable Rust (`edition 2021`) and is portable by
+construction.
+
+## Known differences from a real console
+
+* The PPU is dot-accurate for the background pipeline, sprites, sprite-0 hit,
+  the odd-frame dot skip and $2005/$2006/$2007 behaviour, but it does not model
+  the bus-conflict artifacts of rendering-time VRAM access, sprite overflow
+  evaluation order, or the power-on palette state.
+* APU mixing uses the documented non-linear curve but is not a die-accurate
+  DAC model; DMC DMA cycle stealing is not modelled.
+* `$4017` IRQ timing, PAL timing and expansion audio are out of scope.
+
+None of these are exercised by Mappy beyond what is implemented; the
+FCEUX comparison above is the evidence.
+
+## Licensing
+
+The decompiler, emulator core and frontend in this repository are original
+work. **Mappy is © 1983, 1984 Namco Ltd.**, all rights reserved; the cartridge
+image and the data extracted from it (`rom/`, `crates/mappy-rom/data/`,
+`disassembly/`) are included only for personal, non-commercial use of a ROM
+the owner already possesses. The 6502 functional test suite by Klaus Dormann is
+GPL and is downloaded on demand, never vendored.

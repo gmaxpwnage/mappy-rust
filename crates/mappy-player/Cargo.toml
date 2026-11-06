@@ -1,0 +1,25 @@
+[package]
+name = "mappy-player"
+description = "Frontend for the decompiled Mappy: windowed player, headless runner, differential test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mappy"
+path = "src/main.rs"
+
+[features]
+default = ["gui", "audio"]
+# Native window + keyboard input (winit + softbuffer; works on Linux, macOS, Windows).
+gui = ["dep:winit", "dep:softbuffer"]
+# Sound output (cpal; on Linux this needs ALSA development files).
+audio = ["dep:cpal"]
+
+[dependencies]
+nes = { path = "../nes" }
+mos6502 = { path = "../mos6502" }
+mappy-rom = { path = "../mappy-rom" }
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
+cpal = { version = "0.15", optional = true }

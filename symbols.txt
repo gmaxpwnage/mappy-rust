@@ -1,0 +1,39 @@
+; Symbol table for Mappy (Japan) (En).
+;
+; Format: `<address> <name>` — `;` starts a comment.
+; Addresses are CPU addresses in the $C000 mirror, which is the mirror the
+; ROM's own vectors point into. The decompiler uses these names for both the
+; annotated listing and the generated Rust function names.
+;
+; Only routines whose behaviour has been confirmed by reading the code (and,
+; where noted, by observing it run) are named. Everything else keeps an
+; automatic `sub_XXXX` / `loc_XXXX` name.
+
+; --- hardware vectors -------------------------------------------------------
+C031 reset                     ; SEI/CLD, stack setup, RAM clear, cold-boot check
+C2EF nmi_handler               ; saves regs, bumps the frame counter at $20
+C304 irq_handler               ; bare RTI: Mappy never uses IRQ sources
+
+; --- framework --------------------------------------------------------------
+C239 clear_update_queue        ; resets the VRAM update queue at $04C0
+C241 ppu_rendering_off         ; $2001 = 0 and clears the sprite-buffer pointer
+C249 joypad_shift_bits         ; LDA $4016,X x8 into $10,X, one bit per frame call
+C1C9 read_controllers          ; strobe both pads, decode edges into $22/$24/$25/$26
+C150 vram_update_flush         ; replays the $04C0 update queue into $2006/$2007
+C25C cold_boot_check           ; $3E/$3F = $5A/$A5 magic distinguishes reset from warm boot
+C2E5 clear_ram_0020            ; zeroes $0020..$00FF
+C0D0 pause_sprites             ; writes the blinking "PAUSE" sprites, or hides OAM
+C128 state_dispatch            ; entry 0 of the state table at $C13E = title screen; saves SP, JMP ($001E)
+C7C9 write_attribute_table     ; uploads the attribute buffer at $0180 to $23C0 and $27C0 (logo colours)
+C7E2 write_attribute_page      ; one 64-byte attribute copy through $2006/$2007
+C141 stack_frame_swap          ; swaps the stack frame in the $0100 page
+C146 stack_frame_swap_y        ; same, indexed
+
+; --- attract / game start ---------------------------------------------------
+C84F title_screen_loop         ; waits for START (8-bit shift register in $25), then starts
+C8AB start_game_setup          ; $42 = 1: from here on input is processed
+C931 game_init_round           ; sets the input-enable byte $040F for each player
+
+; --- sound ------------------------------------------------------------------
+F4F1 apu_engine                ; called from NMI once the game is running
+F80B sound_channel_update      ; per-channel register writer

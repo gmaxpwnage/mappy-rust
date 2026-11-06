@@ -1,0 +1,9 @@
+[package]
+name = "nes"
+description = "NES/Famicom hardware model: PPU, APU, cartridge, bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mos6502 = { path = "../mos6502" }

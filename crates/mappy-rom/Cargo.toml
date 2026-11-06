@@ -1,0 +1,10 @@
+[package]
+name = "mappy-rom"
+description = "Mappy (Japan) (En), decompiled from 6502 machine code to Rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mos6502 = { path = "../mos6502" }
+nes = { path = "../nes" }
