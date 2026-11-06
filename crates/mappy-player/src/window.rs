@@ -14,6 +14,8 @@
 //! could render ~850 frames/s, but the game still runs at 60.
 
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::{Seek, SeekFrom, Write};
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -59,6 +61,20 @@ pub fn run(opts: &mut Opts) {
         }
     }
     let fps = if opts.fps > 1.0 { opts.fps } else { NTSC_FPS };
+    // Open the recorder before `audio` is moved into the app.
+    let recorder = match opts.record.as_ref() {
+        Some(path) => {
+            let rate = audio
+                .as_ref()
+                .map(|a| a.sample_rate())
+                .unwrap_or(nes::apu::SAMPLE_RATE as u32);
+            Some(
+                Recorder::create(path.to_str().unwrap_or("mappy.wav"), rate)
+                    .unwrap_or_else(|e| panic!("cannot record to {path:?}: {e}")),
+            )
+        }
+        None => None,
+    };
     let mut app = App {
         game,
         scale: opts.scale.max(1) as usize,
@@ -77,6 +93,7 @@ pub fn run(opts: &mut Opts) {
         stats_frames: 0,
         stats_since: Instant::now(),
         stats_rendered: 0,
+        recorder,
     };
     if opts.stats {
         eprintln!("pacing: locked to {fps:.4} frames/s ({:.2} ms/frame)", 1000.0 / fps);
@@ -110,6 +127,7 @@ struct App {
     stats_frames: u32,
     stats_since: Instant,
     stats_rendered: u32,
+    recorder: Option<Recorder>,
 }
 
 impl App {
@@ -182,10 +200,14 @@ impl App {
             self.frame = self.frame.wrapping_add(1);
         }
 
-        // Audio: hand the samples produced by those frames to the device.
+        // Audio: hand the samples produced by those frames to the device,
+        // and to the recorder if one is active.
         let samples = self.game.take_audio();
         if let Some(a) = &self.audio {
             a.push(&samples);
+        }
+        if let Some(r) = self.recorder.as_mut() {
+            r.push(&samples);
         }
 
         self.present();
@@ -269,6 +291,79 @@ impl ApplicationHandler for App {
         self.tick();
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_deadline));
     }
+}
+
+// ---------------------------------------------------------------------------
+// WAV recording (`--record`).
+// ---------------------------------------------------------------------------
+
+/// Writes exactly what is sent to the audio device, as 16-bit mono PCM.
+/// The header is patched on drop, so a normal window close always leaves a
+/// playable file.
+struct Recorder {
+    file: File,
+    samples: u32,
+    rate: u32,
+    /// Samples written since the header was last checkpointed.
+    since_checkpoint: u32,
+}
+
+impl Recorder {
+    fn create(path: &str, rate: u32) -> std::io::Result<Recorder> {
+        let mut file = File::create(path)?;
+        write_wav_header(&mut file, rate, 0)?;
+        Ok(Recorder { file, samples: 0, rate, since_checkpoint: 0 })
+    }
+
+    fn push(&mut self, samples: &[f32]) {
+        let mut buf = Vec::with_capacity(samples.len() * 2);
+        for s in samples {
+            let v = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        if self.file.write_all(&buf).is_ok() {
+            self.samples += samples.len() as u32;
+            self.since_checkpoint += samples.len() as u32;
+            // Checkpoint the header about once a second, so the file stays
+            // playable even if the process is killed rather than closed.
+            if self.since_checkpoint >= self.rate {
+                self.since_checkpoint = 0;
+                self.finish();
+            }
+        }
+    }
+
+    fn finish(&mut self) {
+        if self.file.seek(SeekFrom::Start(0)).is_ok() {
+            let _ = write_wav_header(&mut self.file, self.rate, self.samples * 2);
+            let _ = self.file.flush();
+            // Back to the end so the next push appends.
+            let _ = self.file.seek(SeekFrom::End(0));
+        }
+    }
+}
+
+impl Drop for Recorder {
+    fn drop(&mut self) {
+        self.finish();
+    }
+}
+
+fn write_wav_header(file: &mut File, rate: u32, data_len: u32) -> std::io::Result<()> {
+    let mut h = Vec::with_capacity(44);
+    h.extend_from_slice(b"RIFF");
+    h.extend_from_slice(&(36 + data_len).to_le_bytes());
+    h.extend_from_slice(b"WAVEfmt ");
+    h.extend_from_slice(&16u32.to_le_bytes());
+    h.extend_from_slice(&1u16.to_le_bytes());
+    h.extend_from_slice(&1u16.to_le_bytes());
+    h.extend_from_slice(&rate.to_le_bytes());
+    h.extend_from_slice(&(rate * 2).to_le_bytes());
+    h.extend_from_slice(&2u16.to_le_bytes());
+    h.extend_from_slice(&16u16.to_le_bytes());
+    h.extend_from_slice(b"data");
+    h.extend_from_slice(&data_len.to_le_bytes());
+    file.write_all(&h)
 }
 
 // ---------------------------------------------------------------------------

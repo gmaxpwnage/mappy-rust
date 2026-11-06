@@ -198,16 +198,37 @@ Audio controls (`--no-audio` disables output entirely):
 * `demo/mappy-music.wav` is a 25-second capture of the game's soundtrack as
   rendered by this project.
 
-Checking it against a reference emulator (`tools/audio_check.py`) found and
-fixed five real synthesis bugs: a frame sequencer running 2.5x too slow (all
-envelopes, note lengths and the triangle's linear counter), pulse and noise
-timers clocked at the CPU rate instead of their correct rates (an octave up),
-two swapped duty tables, and a sweep unit that applied its update before
-computing the target period. After the fixes, per-frame channel frequencies
-and duties match FCEUX's APU model exactly (0 of 200 frames differ), and
-against mednafen's recorded output the musical rests line up within 1-4
-frames, the volume envelope correlates at r = 0.96, and every spectral band
-is within 1.2-1.6x of the reference with matching harmonic structure.
+Checking it against reference emulators (`tools/audio_check.py`) found and
+fixed six real synthesis bugs:
+
+1. the frame sequencer used cumulative cycle counts as per-step delays, making
+   everything 2.5x too slow;
+2. pulse timers were clocked at the CPU rate instead of the APU rate, putting
+   the melody an octave up;
+3. the noise shift register was clocked at the wrong rate (its period table is
+   in CPU cycles);
+4. the 50% and 75% duty sequences were wrong;
+5. the sweep unit applied its update before computing the target period, and
+   had its ones'-complement adder on the wrong channel;
+6. the frame sequencer was missing the **quarter-frame clock of step 2**, so
+   envelopes and the triangle's linear counter ran at 180 Hz instead of 240 Hz
+   and every note sustained ~25% too long - this is what made the bass and
+   melody sound "wrong" in the first playable builds.
+
+After the fixes, per-frame channel frequencies and duties match FCEUX's APU
+model exactly (0 of 200 frames differ). Measured against mednafen's recorded
+output of the same passage:
+
+| metric | before | after |
+| --- | --- | --- |
+| musical rests vs reference | 0.35 s late, four rests missing | within 1 frame (16 ms) |
+| triangle level vs reference | up to 5500x (notes never stopped) | 1.29x (uniform) |
+| pulse1 level vs reference | 1.49x | 1.39x |
+| spectral balance (all bands) | non-uniform | uniform |
+
+The residual is a constant ~2.5 dB gain offset (a headroom choice) with
+matching harmonic structure; the note envelopes now decay at the hardware rate
+(verified by a test that pins the 0.688 s decay of a divider-10 envelope).
 
 ### Frame pacing
 

@@ -166,9 +166,9 @@ fn noise_shift_register_clocks_at_the_table_rate() {
 #[test]
 fn frame_sequencer_runs_at_its_documented_rate() {
     let cart = cart();
-    // Four-step mode: quarter-frame clocks at 7457, 22371 and 29829 cycles and
-    // half-frame clocks at 14913 and 29829, i.e. 3 and 2 per 29830-cycle
-    // sequence. One second of CPU time is 60 such sequences.
+    // Four-step mode: quarter-frame clocks at 7456, 14912, 22370 and 29828
+    // cycles and half-frame clocks at 14912 and 29828, i.e. 4 and 2 per
+    // 29830-cycle sequence (240 Hz and 120 Hz). One second is 60 sequences.
     let mut apu = Apu::new();
     apu.write_register(0x4017, 0x40); // four-step mode, frame IRQ inhibited
     apu.run(&cart, 1_789_773);
@@ -177,9 +177,9 @@ fn frame_sequencer_runs_at_its_documented_rate() {
     let half = snap.half_clocks as f64;
     let sequences = 1_789_773.0 / 29_830.0;
     assert!(
-        (quarter - 3.0 * sequences).abs() < 6.0,
+        (quarter - 4.0 * sequences).abs() < 6.0,
         "{quarter} quarter-frame clocks in one second, expected about {}",
-        3.0 * sequences
+        4.0 * sequences
     );
     assert!(
         (half - 2.0 * sequences).abs() < 6.0,
@@ -191,28 +191,31 @@ fn frame_sequencer_runs_at_its_documented_rate() {
 #[test]
 fn envelope_decays_at_the_quarter_frame_rate() {
     let cart = cart();
-    // Constant volume off, volume/divider = 10: the envelope steps every 10
-    // quarter-frame clocks, i.e. 15 steps take 150 clocks of the ~180 per
-    // second. A 2.5x-slow sequencer would take well over a second longer.
+    // Constant volume off, divider = 10: one decay step every 11 quarter-frame
+    // clocks. The envelope has 15 steps, so it reaches zero after
+    // 15 * 11 / 240 Hz = 0.6875 s. A sequencer clocked at 180 Hz (a missing
+    // quarter-frame clock) would take 0.917 s, so the *duration* is what makes
+    // this test meaningful - counting steps saturates at 15.
     let mut apu = Apu::new();
     apu.write_register(0x4000, 0x0A); // envelope mode, divider 10
     apu.write_register(0x4003, 0x08); // start the envelope
-    let mut steps = 0;
-    let mut last = apu.snapshot().pulse1.volume;
-    for _ in 0..1_789_773 {
+    // The envelope reads zero until the first quarter-frame clock loads it.
+    let mut started_at = None;
+    let mut zero_at = None;
+    for i in 0..1_789_773u32 {
         apu.run(&cart, 1);
-        let now = apu.snapshot().pulse1.volume;
-        if now != last {
-            if now < last {
-                steps += 1;
-            }
-            last = now;
+        let v = apu.snapshot().pulse1.volume;
+        if started_at.is_none() && v == 15 {
+            started_at = Some(i as f64 / 1_789_773.0);
+        }
+        if started_at.is_some() && zero_at.is_none() && v == 0 {
+            zero_at = Some(i as f64 / 1_789_773.0 - started_at.unwrap());
         }
     }
-    // One second holds ~180 quarter clocks; with divider 10 that is ~18 steps.
+    let t = zero_at.expect("envelope never reached zero");
     assert!(
-        (15..=21).contains(&steps),
-        "envelope made {steps} decay steps in one second, expected about 18"
+        (0.66..0.72).contains(&t),
+        "envelope reached zero after {t:.3}s, expected about 0.6875s          (a quarter-frame clock of 240 Hz)"
     );
 }
 

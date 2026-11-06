@@ -426,6 +426,10 @@ pub struct Apu {
     /// device wants; headless tools keep the default.
     sample_rate: f64,
     pub samples: Vec<f32>,
+    /// Number of writes to each APU register ($4000-$4017), for diagnostics.
+    pub write_count: [u32; 0x18],
+    /// Recent register writes (address, value), for diagnostics.
+    pub write_log: Vec<(u16, u8)>,
 }
 
 impl Default for Apu {
@@ -459,6 +463,8 @@ impl Apu {
             dc_y: 0.0,
             sample_rate: SAMPLE_RATE,
             samples: Vec::with_capacity(4096),
+            write_count: [0; 0x18],
+            write_log: Vec::new(),
         }
     }
 
@@ -474,6 +480,12 @@ impl Apu {
     }
 
     pub fn write_register(&mut self, addr: u16, val: u8) {
+        if (0x4000..0x4018).contains(&addr) {
+            self.write_count[(addr - 0x4000) as usize] += 1;
+            if self.write_log.len() < 200_000 {
+                self.write_log.push((addr, val));
+            }
+        }
         match addr {
             0x4000 => {
                 self.pulse1.duty = val >> 6;
@@ -736,15 +748,22 @@ impl Apu {
         // the end of the sequence. Treating them as per-step delays would run
         // every envelope, length and linear counter far too slowly.
         self.frame_cycle += 1;
+        // Step boundaries in CPU cycles (APU_Frame_Counter, APU cycles x 2):
+        //   mode 0: 7456 / 14912 / 22370 / 29828, wrapping after 29830
+        //   mode 1: 7456 / 14912 / 22370 / 37280, wrapping after 37282
+        // Every step except mode 1's fourth clocks the quarter frame; the
+        // second and last steps also clock the half frame. Missing the step-2
+        // quarter clock makes envelopes and the triangle's linear counter
+        // decay 25% too slowly.
         let (quarter, half, irq) = match (self.five_step, self.frame_cycle) {
-            (false, 7457) => (true, false, false),
-            (false, 14913) => (false, true, false),
-            (false, 22371) => (true, false, false),
-            (false, 29829) => (true, true, true),
-            (true, 7457) => (true, false, false),
-            (true, 14913) => (false, true, false),
-            (true, 22371) => (true, false, false),
-            (true, 37281) => (true, true, false),
+            (false, 7456) => (true, false, false),
+            (false, 14912) => (true, true, false),
+            (false, 22370) => (true, false, false),
+            (false, 29828) => (true, true, true),
+            (true, 7456) => (true, false, false),
+            (true, 14912) => (true, true, false),
+            (true, 22370) => (true, false, false),
+            (true, 37280) => (true, true, false),
             _ => (false, false, false),
         };
         if quarter || half {

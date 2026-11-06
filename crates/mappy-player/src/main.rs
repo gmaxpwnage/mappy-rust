@@ -60,6 +60,7 @@ fn usage() {
 
 USAGE:
     mappy play      [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
+                    [--record FILE.wav]
     mappy headless  [--frames N] [--every N] [--outdir DIR] [--input SCRIPT]
     mappy trace     [--frames N] [--input SCRIPT] [--out FILE]
     mappy diff      [--rom PATH] [--frames N] [--input SCRIPT]
@@ -100,6 +101,7 @@ struct Opts {
     rom_given: bool,
     fps: f64,
     stats: bool,
+    record: Option<PathBuf>,
 }
 
 impl Opts {
@@ -122,6 +124,7 @@ impl Opts {
             rom_given: false,
             fps: 60.0988,
             stats: false,
+            record: None,
         };
         let mut i = 0;
         while i < args.len() {
@@ -189,6 +192,10 @@ impl Opts {
                 "--stats" => {
                     o.stats = true;
                     i += 1;
+                }
+                "--record" => {
+                    o.record = Some(PathBuf::from(need(i)));
+                    i += 2;
                 }
                 "--engine" => {
                     let v = need(i);
@@ -465,6 +472,19 @@ fn apu_dump(o: &mut Opts) {
     }
     std::fs::write(&o.out, out).unwrap();
     println!("wrote {} frames of APU state to {:?}", o.frames, o.out);
+    let mut log = String::new();
+    for (addr, val) in &m.apu.write_log {
+        log.push_str(&format!("{addr:04X} {val:02X}\n"));
+    }
+    let writes_path = o.out.with_extension("writes.txt");
+    std::fs::write(&writes_path, log).unwrap();
+    println!("APU register writes:");
+    for (i, n) in m.apu.write_count.iter().enumerate() {
+        if *n > 0 {
+            print!("  ${:04X}: {n}", 0x4000 + i);
+        }
+    }
+    println!();
 }
 
 /// Throughput measurement: frames per second of the decompiled engine.
