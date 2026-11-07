@@ -38,6 +38,10 @@ pub struct Machine {
     strobe: bool,
     stall_cycles: u32,
     prev_nmi: bool,
+    /// CPU cycles accumulated for the APU but not yet applied. The APU is
+    /// advanced in chunks to keep its per-instruction cost out of the hot
+    /// path; anything that touches an APU register flushes first.
+    apu_pending: u32,
     /// Number of CPU cycles executed since reset (for timing/diagnostics).
     pub total_cycles: u64,
     /// Diagnostics: controller strobes and reads.
@@ -63,6 +67,7 @@ impl Machine {
             strobe: false,
             stall_cycles: 0,
             prev_nmi: false,
+            apu_pending: 0,
             total_cycles: 0,
             pad_writes: 0,
             pad_reads: 0,
@@ -76,6 +81,7 @@ impl Machine {
 
     pub fn reset(&mut self) {
         self.cpu = Cpu::default();
+        self.apu_pending = 0;
         self.ram = [0; 0x800];
         // The 2A03 has no decimal mode.
         self.cpu.bcd = false;
@@ -140,18 +146,39 @@ impl Machine {
         bit
     }
 
+    /// APU cycles per batch. Register accesses flush the pending remainder,
+    /// so this only trades a little IRQ-line latency for a lot less work per
+    /// instruction.
+    const APU_CHUNK: u32 = 32;
+
+    /// Apply any APU cycles accumulated since the last chunk.
+    #[inline(always)]
+    pub fn flush_apu(&mut self) {
+        if self.apu_pending != 0 {
+            let n = self.apu_pending;
+            self.apu_pending = 0;
+            self.apu.run(&self.cart, n);
+            self.cpu.irq_line = self.apu.irq();
+        }
+    }
+
     /// Advance all hardware by `cycles` CPU cycles.
     pub fn tick(&mut self, cycles: u32) {
         let cycles = cycles + self.stall_cycles;
         self.stall_cycles = 0;
         self.total_cycles = self.total_cycles.wrapping_add(cycles as u64);
-        self.apu.run(&self.cart, cycles);
+        self.apu_pending += cycles;
+        if self.apu_pending >= Self::APU_CHUNK {
+            let n = self.apu_pending;
+            self.apu_pending = 0;
+            self.apu.run(&self.cart, n);
+            self.cpu.irq_line = self.apu.irq();
+        }
         self.ppu.run(&self.cart, cycles);
         if self.ppu.nmi_out && !self.prev_nmi {
             self.cpu.nmi_pending = true;
         }
         self.prev_nmi = self.ppu.nmi_out;
-        self.cpu.irq_line = self.apu.irq();
     }
 
     /// Execute one instruction with the reference interpreter *without*
@@ -216,7 +243,10 @@ impl Bus for Machine {
                 _ => self.ppu.open_bus(),
             },
             0x4000..=0x4014 => 0,
-            0x4015 => self.apu.read_status(),
+            0x4015 => {
+                self.flush_apu();
+                self.apu.read_status()
+            }
             0x4016 => self.read_pad(1),
             0x4017 => self.read_pad(2),
             0x4018..=0x401F => 0,
@@ -257,7 +287,10 @@ impl Bus for Machine {
                     self.strobe = false;
                 }
             }
-            0x4000..=0x4013 | 0x4015..=0x4017 => self.apu.write_register(addr, val),
+            0x4000..=0x4013 | 0x4015..=0x4017 => {
+                self.flush_apu();
+                self.apu.write_register(addr, val);
+            }
             0x4018..=0x401F => {}
             0x4020..=0xFFFF => self.cart.write_prg(addr, val),
         }

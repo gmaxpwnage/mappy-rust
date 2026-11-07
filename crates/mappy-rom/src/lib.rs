@@ -74,6 +74,7 @@ impl Mappy {
 
     /// Audio samples produced since the last call (`-1.0..=1.0`).
     pub fn take_audio(&mut self) -> Vec<f32> {
+        self.machine.flush_apu();
         self.machine.apu.drain_samples()
     }
 
@@ -90,16 +91,12 @@ impl Mappy {
 
 /// One instruction of the translated program: interrupts, then the
 /// translated instruction selected by the program counter.
-#[inline]
+#[inline(always)]
 pub fn step_engine(m: &mut Machine) {
     if m.cpu.nmi_pending || (m.cpu.irq_line && !m.cpu.flag(mos6502::FLAG_I)) {
         let mut cpu = m.cpu;
         cpu.take_interrupts(m);
         m.cpu = cpu;
-        return;
-    }
-    if m.cpu.pc < 0x8000 {
-        m.step_cpu_only();
         return;
     }
     generated::dispatch(m);

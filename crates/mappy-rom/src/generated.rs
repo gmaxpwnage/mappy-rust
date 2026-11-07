@@ -210343,16 +210343,15 @@ pub static DISPATCH: [fn(&mut Machine); PRG_SIZE] = [
 /// This is the equivalent of the 6502's opcode fetch: the low 14 bits of the
 /// PC select the translated function, which performs the instruction and
 /// leaves the PC at the next instruction's address.
-#[inline]
+#[inline(always)]
 pub fn dispatch(m: &mut Machine) {
-    let phys = (m.cpu.pc & 0x3FFF) as usize;
     if m.cpu.pc < 0x8000 {
         // Executing out of RAM is not something Mappy does; fall back to the
         // reference interpreter so behaviour still matches.
         m.step_cpu_only();
         return;
     }
-    DISPATCH[phys](m);
+    DISPATCH[(m.cpu.pc & 0x3FFF) as usize](m);
 }
 
 // Number of instructions in the translated image: 4869.

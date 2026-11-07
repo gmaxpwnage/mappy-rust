@@ -70,7 +70,7 @@ translator emits functions for those too.
 The generated code is a translation, not a decompilation. Registers, flags, the
 stack and cycle counts are still the 6502's, and control flow still goes through
 `DISPATCH`. The machine around the code is an emulator: RAM, cartridge mapping,
-a dot-accurate PPU and a full APU. `generated.rs` will not tell you how Mappy
+a PPU that keeps the console's beam timing, and a full APU. `generated.rs` will not tell you how Mappy
 works, and editing it is not how you change the game.
 
 The decompilation in the useful sense is the analysis:
@@ -82,11 +82,11 @@ The decompilation in the useful sense is the analysis:
   sprites, the cold-boot check
 
 The translation removes the fetch and decode step and keeps everything else. On
-one core the translated engine runs about 850 frames per second, against 730 for
-the interpreter in `crates/mos6502` that ships beside it as the test oracle. That
-16% is all the decode step is worth, so the emulated PPU and APU remain the
-bottleneck. What the translated build buys is a self-contained binary with no ROM
-file and no decoder, and one engine behind the desktop, TV and browser builds.
+one core the translated engine runs about 1,800 frames per second, against about
+1,500 for the interpreter in `crates/mos6502` that ships beside it as the test
+oracle. That gap is all the decode step is worth; the emulated hardware sets the
+pace. What the translated build buys is a self-contained binary with no ROM file
+and no decoder, and one engine behind the desktop, TV and browser builds.
 
 ## Play
 
@@ -225,10 +225,15 @@ Six checks, run in CI or by hand.
 
 ## Known limits
 
-- The PPU is dot-accurate for the background fetch pipeline, sprites, sprite-0
-  hit, the odd-frame dot skip and `$2005`/`$2006`/`$2007` behaviour. It does not
-  model bus conflicts on rendering-time VRAM access, sprite overflow evaluation
-  order, or the power-on palette.
+- Beam timing follows the hardware: vblank and NMI, sprite evaluation at dot 257,
+  sprite-0 hit, the odd-frame dot skip and the `$2005`/`$2006`/`$2007` port are
+  modelled dot by dot. The visible line itself is composed in one pass as the
+  beam enters it, so if a game switches rendering on partway through a scanline,
+  the rest of that line is drawn from the line's start address instead of the
+  stale shifter contents a real PPU shows. Three frames of 600 in a scripted run
+  differ from a fully dot-by-dot renderer because of this.
+- The PPU does not model bus conflicts on rendering-time VRAM access, sprite
+  overflow evaluation order, or the power-on palette.
 - APU mixing follows the documented non-linear curve but is not a die-accurate
   DAC model, and DMC DMA cycle stealing is not modelled.
 - `$4017` IRQ timing, PAL timing and expansion audio are out of scope.
