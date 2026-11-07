@@ -1,180 +1,37 @@
-# Mappy (Japan) (En) — decompiled to Rust
+# Mappy (Japan) (En), recompiled from 6502 to Rust
 
 [![CI](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml)
 
-The 24 KiB NES cartridge **Mappy (Japan) (En)** (Namco, 1984) — 16 KiB of 6502
-code and data plus 8 KiB of pattern tables — turned into a Rust workspace that
-plays the game natively on Linux, macOS, Windows and LG webOS TVs.
+Mappy is a 1984 Namco NES cartridge: 16 KiB of 6502 code and data plus 8 KiB of
+pattern tables. This repository statically recompiles it to Rust. The PRG image
+is translated once, function by function, into a native binary that runs on a
+Rust model of the NES hardware. The cartridge is embedded, so the game needs no
+ROM file, and no instruction is decoded at run time.
 
-> **LG webOS TV / Homebrew Channel:** add
-> `https://gmaxpwnage.github.io/mappy-rust/webos/apps.json` under
-> **Homebrew Channel → Settings → Repositories → Add repository**, then
-> install **Mappy** from the channel. See
-> [Play on an LG webOS TV](#play-on-an-lg-webos-tv) for the Magic Remote
-> mapping and the IPK download.
+The port runs on Linux, macOS, Windows, in a browser and on LG webOS TVs.
 
-* **`crates/mappy-rom`** is the game: every 6502 instruction in the ROM,
-  translated to a Rust function (16 384 of them), calling into a Rust model of
-  the NES hardware. The cartridge data is embedded in the binary, so the result
-  is a self-contained native executable — no ROM file, no emulator loop over
-  opcodes.
-* **`crates/nes`** and **`crates/mos6502`** are the machine it runs on: a
-  dot-accurate PPU, a full APU, NROM cartridge mapping, and a cycle-counted
-  6502 that doubles as the reference implementation the translation is tested
-  against.
-* **`crates/decompiler`** performs the translation: it analyses the ROM,
-  annotates it, writes the annotated disassembly (`disassembly/mappy.asm`) and
-  generates the Rust source.
-* **`crates/mappy-native`** exposes the same engine as a `no_std` C library, so
-  the LG webOS TV build is a native ARM binary driven by SDL2 — not the browser
-  build.
+[Play in the browser](https://gmaxpwnage.github.io/mappy-rust/)
+· [Downloads](https://github.com/gmaxpwnage/mappy-rust/releases)
+· [webOS install](#lg-webos-tv)
 
-```
-                 rom/mappy.nes
-                       │
-              ┌────────▼─────────┐
-              │    decompiler    │  static analysis + 6502→Rust translation
-              └───┬──────────┬───┘
-                  │          │
-   disassembly/mappy.asm   crates/mappy-rom/src/generated.rs
-      (annotated)              (16 384 Rust functions)
-                                  │
-                       ┌──────────▼──────────┐
-                       │  mappy (frontend)   │  winit window, cpal audio
-                       └─────────────────────┘  ⟵ runs the actual game
-```
+## What is in the repository
 
-## Play in the browser
-
-**<https://gmaxpwnage.github.io/mappy-rust/>** — the same Rust code compiled to
-WebAssembly, no emulator loop and no bindings layer: `crates/mappy-web` exports
-nine `extern "C"` functions and `web/mappy.js` is the entire frontend (canvas,
-keyboard/touch input, Web Audio). Keys are the same as the native build, and
-there are on-screen buttons for touch devices.
-
-The wasm build is byte-for-byte the same game logic as the native one: after
-150 frames its framebuffer is pixel-identical to `mappy headless`'s.
-
-## Play on an LG webOS TV
-
-The TV release is a **native ARM** application, not the WebAssembly page:
-`crates/mappy-native` is the decompiled engine compiled as a `no_std` static
-library, and `webos/main.c` is a small SDL2 frontend that owns the window, the
-PulseAudio stream and the 60.0988 fps clock. `tools/build_webos.py` cross-compiles
-both against the unofficial webOS NDK and writes a standard IPK.
-
-### Install from the Homebrew Channel
-
-On the TV, open the Homebrew Channel → **Settings → Repositories → Add
-repository** and enter:
-
-    https://gmaxpwnage.github.io/mappy-rust/webos/apps.json
-
-The channel then lists **Mappy** and installs
-`com.gmaxpwnage.mappy_<version>_arm.ipk`. The same IPK is on the releases page
-for webOS Dev Manager or `ares-install`.
-
-### Magic Remote
-
-| Remote | Game |
+| path | role |
 | --- | --- |
-| Left / Right | move |
-| OK (centre button) | A — jump |
-| Up | Start |
-| Down | unbound |
-| B | unbound (the game does not use it) |
-| Back | exits the app (left to webOS) |
+| `crates/decompiler` | reads the ROM, writes the annotated listing and the Rust translation |
+| `crates/mappy-rom` | the translated game, the embedded cartridge, the frame loop |
+| `crates/mos6502` | 6502 core: interpreter, disassembler, opcode tables |
+| `crates/nes` | PPU, APU, NROM cartridge, bus, controllers |
+| `crates/mappy-player` | desktop frontend: winit window, cpal audio, headless and analysis commands |
+| `crates/mappy-web` | WebAssembly build, nine exported C functions |
+| `crates/mappy-native` | `no_std` static library behind the webOS TV build |
+| `webos/`, `web/` | SDL2 frontend for the TV, browser page for the web |
 
-The game starts on its own title screen; press **Up** (Start) to begin.
+## How the translation works
 
-### Build the IPK
-
-```sh
-rustup target add armv7-unknown-linux-gnueabi
-# fetch the NDK once: https://github.com/openlgtv/buildroot-nc4 (2026.08-webos)
-python3 tools/build_webos.py --sdk ~/webos-sdk \
-    --out dist/webos --selftest
-```
-
-`--selftest` builds a headless ARM test and, when `QEMU_ARM=qemu-arm` is set,
-runs 600 frames under qemu and compares the video/audio hash with the x86_64
-reference. On NixOS the Rust toolchain and the NDK's host binaries need an FHS
-environment; run the same command through `steam-run`, as described in the
-NixOS note below.
-
-The IPK is tested on webOS 6.5.3 (ARMv7, ~1 GHz): it holds 60.0 fps with the
-engine at ~11 ms and presentation at ~5 ms per frame. webOS 4.0 or newer is
-required (the app uses SDL2, which the TV provides).
-
-## Download
-
-Prebuilt binaries are on the [releases page](https://github.com/gmaxpwnage/mappy-rust/releases):
-Linux (x86_64, aarch64), macOS (Apple silicon, Intel), Windows x86_64, and the
-LG webOS TV IPK (`com.gmaxpwnage.mappy_<version>_arm.ipk`). On a TV the easiest
-route is the Homebrew Channel repository
-(`https://gmaxpwnage.github.io/mappy-rust/webos/apps.json`); the full
-instructions are [above](#play-on-an-lg-webos-tv).
-Each archive holds the game (`mappy`), the decompiler and the licence files;
-`SHA256SUMS.txt` covers every archive. The game needs no ROM file — the
-cartridge data is compiled in.
-
-## Run it
-
-```sh
-cd ~/mappy
-
-# Option A: Nix (reproducible toolchain + window/audio libraries)
-nix develop
-cargo run --release -p mappy-player -- play
-
-# Option B: any Rust toolchain with a C linker (this machine's exact paths are
-# in toolchain.env, which also sets ALSA/X11/Wayland library paths)
-source toolchain.env
-cargo run --release -p mappy-player -- play
-```
-
-`play` needs no ROM path: the cartridge data is compiled into
-`mappy-rom` (`crates/mappy-rom/data/{prg,chr}.bin`, extracted from the image).
-
-### Controls
-
-| Key | NES pad |
-| --- | --- |
-| Arrow keys / `WASD` | D-pad |
-| `Z` or `K` or `Space` | A |
-| `X` or `J` | B |
-| `Enter` | Start (start game / pause) |
-| `Shift` or `Tab` | Select |
-| `Esc` | quit |
-
-On the title screen press **Enter**. Note that the original only samples a
-*fresh* press in the exact frame its title loop checks the pad, so if the first
-press seems ignored, press it again — that is the game's behaviour, confirmed
-against FCEUX.
-
-### Options
-
-```
-mappy play     [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
-mappy headless [--frames N] [--every N] [--outdir DIR] [--engine decompiled|interpreter]
-mappy trace    [--frames N] [--pc-range LO-HI] [--watch-ram ADDR]
-mappy diff     [--frames N] [--input SCRIPT]
-mappy ram|nt|probe|bench ...
-```
-
-`--input` takes a script of scripted controller input, which is how the
-automated tests drive the game:
-
-```
---input "START@40-43,RIGHT@90-260,A@270-285,LEFT@500-640"
-```
-
-## What "decompiled to Rust" means here
-
-The ROM is not interpreted at runtime. `decompiler` decodes the PRG image
-statically and emits, for **every** byte offset in the image, a Rust function
-that performs that one instruction against the machine and sets the program
-counter to wherever the instruction leads:
+`decompiler` decodes the PRG image and writes one Rust function for every byte
+offset in it. A function performs one 6502 instruction against the machine and
+sets the program counter to where execution continues:
 
 ```rust
 /// `$C031` — `SEI` — reset
@@ -189,228 +46,216 @@ pub fn fn_reset(m: &mut Machine) {
 #[inline(never)]
 pub fn f_007c(m: &mut Machine) {
     m.cpu.add_cycles(6);
-    let ret = next_pc(m, 0x007f) - 1;
+    let ret = next_pc(m, 0x007F) - 1;
     m.push((ret >> 8) as u8);
     m.push(ret as u8);
-    m.cpu.pc = 0xC0D0u16 /* pause_sprites */;
+    m.cpu.pc = 0xC0D0; // pause_sprites
 }
 ```
 
-Control flow is Rust calls; the dispatch table `DISPATCH[pc & 0x3FFF]` is the
-translation of the 6502's opcode fetch. All 151 documented instructions and the
-undocumented NMOS opcodes are handled, because a decompiler must be able to
-decode every byte of the image — including data that is never executed.
+The opcode fetch becomes a table lookup: `DISPATCH[pc & 0x3FFF](m)` picks the
+function for the current program counter, so one indirect call runs one
+instruction. Calls stay on the 6502 stack, cycles are still added per
+instruction, and the program reads its data tables from the addresses the
+original used.
 
-Two things are *not* translated, and both are data rather than code:
+All 151 documented opcodes and the undocumented NMOS opcodes are emitted,
+because the translator cannot prove which bytes never run. That is why
+`generated.rs` holds 16,384 functions for 4,869 instructions: 6,506 PRG offsets
+are data (level layouts, palettes, text, the sound driver's tables), and the
+translator emits functions for those too.
 
-* the 8 KiB of CHR pattern tables (the game reads them through the PPU), and
-* the ROM's data tables (level layouts, palettes, text, Namco sound data),
-  which the translated code addresses exactly as the original did.
+## What the output is
 
-On top of the mechanical translation, the code has been read and annotated:
-`symbols.txt` names the routines whose behaviour was confirmed (reset, NMI,
-controller decoding, the VRAM update queue, the title screen, the pause
-sprites, the APU engine, …), and `docs/DECOMPILATION.md` documents the
-structure of the original program.
+The generated code is a translation, not a decompilation. Registers, flags, the
+stack and cycle counts are still the 6502's, and control flow still goes through
+`DISPATCH`. The machine around the code is an emulator: RAM, cartridge mapping,
+a dot-accurate PPU and a full APU. `generated.rs` will not tell you how Mappy
+works, and editing it is not how you change the game. (`crates/decompiler` keeps
+its original name, though it emits a translation.)
+
+The decompilation in the useful sense is the analysis:
+
+- `disassembly/mappy.asm`, 6,400 lines of annotated listing
+- `symbols.txt`, 21 named routines from the reset handler to the Namco sound engine
+- `docs/DECOMPILATION.md`, which walks the original program routine by routine:
+  the state dispatcher at `$C128`, the VRAM update queue at `$04C0`, the pause
+  sprites, the cold-boot check
+
+The translation removes the fetch and decode step and keeps everything else. On
+one core the translated engine runs about 850 frames per second, against 730 for
+the interpreter in `crates/mos6502` that ships beside it as the test oracle. That
+16% is all the decode step is worth, so the emulated PPU and APU remain the
+bottleneck. What the translated build buys is a self-contained binary with no ROM
+file and no decoder, and one engine behind the desktop, TV and browser builds.
+
+## Play
+
+### In the browser
+
+<https://gmaxpwnage.github.io/mappy-rust/> runs the same engine as WebAssembly.
+`crates/mappy-web` exports nine C functions; `web/mappy.js` is the whole
+frontend, with canvas, keyboard and touch input, and Web Audio.
+
+### LG webOS TV
+
+The TV build is a native ARM binary, not the web page: `mappy-native` compiled as
+a `no_std` static library, with `webos/main.c` around it for SDL2, PulseAudio and
+the 60.0988 Hz clock.
+
+In the Homebrew Channel go to Settings → Repositories → Add repository, then
+enter:
+
+    https://gmaxpwnage.github.io/mappy-rust/webos/apps.json
+
+The channel installs `com.gmaxpwnage.mappy_<version>_arm.ipk`. The same package
+works with webOS Dev Manager or `ares-install`.
+
+| remote | game |
+| --- | --- |
+| Left / Right | move |
+| OK | A, jump |
+| Up | Start |
+| Back | exit the app |
+
+The game opens on its title screen; press Up to start. webOS 4.0 or newer is
+required, because the app uses the SDL2 the TV provides.
+
+To build the IPK:
+
+```sh
+rustup target add armv7-unknown-linux-gnueabi
+# NDK: https://github.com/openlgtv/buildroot-nc4 (2026.08-webos)
+python3 tools/build_webos.py --sdk ~/webos-sdk --out dist/webos --selftest
+```
+
+`--selftest` builds a headless ARM binary and, with `QEMU_ARM=qemu-arm`, runs 600
+frames under qemu and compares the video and audio hashes with the x86_64 build.
+On NixOS the NDK's host tools need an FHS environment, so run the command under
+`steam-run`.
+
+Tested on webOS 6.5.3 (ARMv7, ~1 GHz): the engine takes about 11 ms and
+presentation about 5 ms per frame, which holds 60.0 fps.
+
+### Downloads
+
+The [releases page](https://github.com/gmaxpwnage/mappy-rust/releases) has Linux
+(x86_64, aarch64), macOS (Apple silicon, Intel), Windows x86_64 and the webOS
+IPK. Each archive holds `mappy`, the `decompiler` binary and the licence files;
+`SHA256SUMS.txt` covers every archive.
+
+## Build and run
+
+```sh
+nix develop     # reproducible toolchain, or: source toolchain.env
+cargo run --release -p mappy-player -- play
+```
+
+No ROM path is needed. The cartridge data is compiled into `mappy-rom` from
+`crates/mappy-rom/data/{prg,chr}.bin`. The engine crates have no platform code,
+so `cargo run --release -p mappy-player --no-default-features -- headless`
+builds without a window or audio.
+
+| key | NES pad |
+| --- | --- |
+| arrows / `WASD` | D-pad |
+| `Z`, `K` or `Space` | A |
+| `X` or `J` | B |
+| `Enter` | Start |
+| `Shift` or `Tab` | Select |
+| `Esc` | quit |
+
+The title loop only samples a fresh press on the frame it checks the pad, so a
+press can be missed. Press again if nothing happens; FCEUX behaves the same way.
+
+```
+mappy play     [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
+mappy headless [--frames N] [--every N] [--outdir DIR] [--engine decompiled|interpreter]
+mappy trace    [--frames N] [--pc-range LO-HI] [--watch-ram ADDR]
+mappy diff     [--frames N] [--input SCRIPT]
+mappy ram|nt|probe|bench ...
+```
+
+`--input` drives the game with a script of controller input, which is how the
+tests play it:
+
+```
+--input "START@40-43,RIGHT@90-260,A@270-285,LEFT@500-640"
+```
+
+The player advances whole frames against the wall clock at 60.0988 Hz, so game
+speed does not follow host throughput. Up to three frames are caught up after a
+short stall; a longer stall re-bases the clock. `--stats` prints the measured
+rate, audio queue depth and catch-up count; `mappy bench` measures raw engine
+speed.
 
 ## Verification
 
-Seven independent layers, all runnable with `cargo test --release` plus the
-commands below.
+Six checks, run in CI or by hand.
 
-1. **6502 correctness** — `mos6502` passes Klaus Dormann's full functional test
-   suite (all documented opcodes, every addressing mode, flag behaviour,
-   decimal mode, the `JMP ($xxFF)` page bug), 1.6 M instructions with no
-   deviation:
+1. 6502 core. `mos6502` passes Klaus Dormann's functional test suite (documented
+   opcodes, every addressing mode, flags, decimal mode, the `JMP ($xxFF)` page
+   bug) over 1.6M instructions. `tools/fetch_tests.sh` fetches the suite, which
+   is GPL and not vendored.
 
-   ```sh
-   tools/fetch_tests.sh   # the suite is GPL, so it is fetched, not vendored
-   cargo test --release -p mos6502
-   ```
+2. Translation against the interpreter. `cargo test --release -p mappy-rom` runs
+   both engines in lockstep from the same power-on state for 260 frames of
+   scripted play, comparing registers and cycle counts after every instruction
+   and RAM, scroll registers, nametables and the framebuffer at the end of every
+   frame. `mappy diff` runs the same comparison for longer.
 
-2. **Translation equivalence** — `crates/mappy-rom/tests/equivalence.rs` runs
-   the reference interpreter and the generated Rust *in lockstep* from the
-   same power-on state for 260 frames of scripted play, and compares registers,
-   cycle counts, RAM, PPU scroll registers, nametables and the framebuffer
-   after every single instruction. They must be identical, and are.
+3. Video against Mednafen. `tools/compare_mednafen.sh` records Mednafen's output
+   of the same ROM, extracts frames with ffmpeg and diffs them against ours.
+   Every frame compared so far is identical, across the title screen, the READY
+   screen and gameplay.
 
-   ```sh
-   cargo test --release -p mappy-rom
-   mappy diff --frames 500 --input "START@19-21,RIGHT@100-300"   # same, longer
-   ```
+4. Audio against FCEUX and Mednafen. `tools/audio_check.py` compares per-frame
+   channel state with FCEUX and recorded output with Mednafen. Per-frame
+   frequencies and duties match FCEUX's model over 200 frames; against
+   Mednafen's recording, rests land within one frame and channel levels agree
+   within a constant gain offset. The comparison caught six synthesis bugs,
+   including a frame sequencer running 2.5x slow and a pulse timer clocked at the
+   CPU rate instead of the APU rate.
 
-3. **Rendering vs a reference emulator** — `tools/compare_mednafen.sh` records
-   Mednafen's video output of the same auto-starting ROM, extracts frames and
-   compares them against ours pixel for pixel: **every compared frame is
-   identical** (title screen, "READY" screen and moving gameplay). The same
-   palette table was validated independently by checking that every colour in
-   the reference's frames exists in ours.
+5. Audio timing. `crates/nes/tests/apu_rate.rs` checks that the APU emits one
+   second of samples per second of CPU time at 44.1, 48 and 96 kHz, and about 734
+   samples per 60 Hz frame.
 
-4. **Audio correctness** — `crates/nes/tests/apu_waveform.rs` measures what the
-   APU *sounds like*: pulse/triangle tone frequency against the documented
-   formulas, duty ratio against the duty register, noise shift-register clock
-   rate, envelope and length-counter clock rates, and sweep behaviour. A timer
-   clocked at the wrong rate (an octave error) fails these even when every
-   register write is correct.
+6. Game start. `--input "START@19-21"` has to reach the PLAYER 1 READY screen and
+   a live score, which the test checks through the input-enable byte at `$040F`.
 
-5. **Audio against a reference emulator** — `tools/audio_check.py` compares
-   this project's audio with FCEUX's per-frame APU state and with mednafen's
-   recorded output (see the Audio section above).
+## Known limits
 
-6. **Audio timing** — `crates/nes/tests/apu_rate.rs` asserts the APU emits
-   exactly one second of samples per second of CPU time at any requested rate
-   (44.1 / 48 / 96 kHz) and ~734 samples per 60 Hz frame, so tempo and pitch
-   follow the console clock rather than the host's frame rate.
+- The PPU is dot-accurate for the background fetch pipeline, sprites, sprite-0
+  hit, the odd-frame dot skip and `$2005`/`$2006`/`$2007` behaviour. It does not
+  model bus conflicts on rendering-time VRAM access, sprite overflow evaluation
+  order, or the power-on palette.
+- APU mixing follows the documented non-linear curve but is not a die-accurate
+  DAC model, and DMC DMA cycle stealing is not modelled.
+- `$4017` IRQ timing, PAL timing and expansion audio are out of scope.
 
-7. **Game-level smoke test** — `--input "START@19-21"` must produce the
-   `PLAYER 1 READY` screen and a live score, i.e. the game really starts,
-   which the test asserts through the input-enable byte at `$040F`.
+Mappy does not depend on any behaviour beyond what is implemented; the Mednafen
+comparison is the evidence.
 
-### Video
-
-The PPU is dot-accurate: the background fetch pipeline (including the
-321-337 prefetch window that fills the shifters for the next line), sprite
-evaluation at dot 257, sprite-0 hit, the odd-frame dot skip, $2005/$2006/$2007
-behaviour and the mid-frame VRAM writes Mappy relies on for its status bar.
-
-Colours use the same 64-entry palette as the reference emulator (Mednafen's
-built-in NES table), verified colour by colour against its rendered output, and
-sprites are looked up in their own palettes at `$3F10-$3F1F` - a sprite's
-palette is *not* the background palette with the same index. Sprite Y points at
-the scanline above the sprite's first row.
-
-Checking rendering against Mednafen's recorded output found and fixed three
-faults: the whole palette was the wrong table (brighter "classic" values
-instead of the reference's), sprites were indexed against the background
-palettes (green "PLAYER 1 READY" instead of red), and sprites sat one scanline
-too high. One further bug - a background prefetch window starting one dot late
-- blanked the leftmost 8 pixels of every scanline.
-
-`tools/compare_mednafen.sh` reproduces the comparison end to end: it records
-Mednafen with its QuickTime recorder, extracts frames with ffmpeg, renders the
-same frames here and diffs them. The result is **pixel-identical frames**:
+## Other paths
 
 ```
-$ MEDNAFEN=... FFMPEG=... tools/compare_mednafen.sh
-r001.png vs mine_001_+0.png: identical
-...
-5/5 reference frames reproduced pixel-for-pixel
+disassembly/mappy.asm   annotated listing of the original program
+symbols.txt             names for the 21 routines identified so far
+docs/DECOMPILATION.md   routine-by-routine notes on the original program
+docs/RELEASE_NOTES.md   release notes
+demo/mappy-music.wav    the soundtrack as rendered by this project
+screenshots/            title, READY and gameplay frames
+tools/                  opcode generator, emulator comparisons, webOS IPK builder
 ```
 
-### Audio
-
-The APU is modelled from the NESdev references: pulse timers in APU cycles
-(`f = CPU/(16*(t+1))`), triangle in CPU cycles (`f = CPU/(32*(t+1))`), the
-noise period table as a CPU-cycle count, the DMC rate table, the documented
-duty sequences, the sweep unit with its ones'-complement adder on pulse 1, and
-the four-step frame sequencer with its *cumulative* step boundaries
-(7457/14913/22371/29829 cycles) driving envelopes, length counters and the
-triangle's linear counter. Channels are mixed with the 2A03's non-linear
-output curve, DC-blocked, and resampled with a fractional accumulator.
-
-Audio controls (`--no-audio` disables output entirely):
-
-* the frontend asks the device for its real sample rate and synthesises at
-  exactly that rate, so nothing is resampled on the way out;
-* `demo/mappy-music.wav` is a 25-second capture of the game's soundtrack as
-  rendered by this project.
-
-Checking it against reference emulators (`tools/audio_check.py`) found and
-fixed six real synthesis bugs:
-
-1. the frame sequencer used cumulative cycle counts as per-step delays, making
-   everything 2.5x too slow;
-2. pulse timers were clocked at the CPU rate instead of the APU rate, putting
-   the melody an octave up;
-3. the noise shift register was clocked at the wrong rate (its period table is
-   in CPU cycles);
-4. the 50% and 75% duty sequences were wrong;
-5. the sweep unit applied its update before computing the target period, and
-   had its ones'-complement adder on the wrong channel;
-6. the frame sequencer was missing the **quarter-frame clock of step 2**, so
-   envelopes and the triangle's linear counter ran at 180 Hz instead of 240 Hz
-   and every note sustained ~25% too long - this is what made the bass and
-   melody sound "wrong" in the first playable builds.
-
-After the fixes, per-frame channel frequencies and duties match FCEUX's APU
-model exactly (0 of 200 frames differ). Measured against mednafen's recorded
-output of the same passage:
-
-| metric | before | after |
-| --- | --- | --- |
-| musical rests vs reference | 0.35 s late, four rests missing | within 1 frame (16 ms) |
-| triangle level vs reference | up to 5500x (notes never stopped) | 1.29x (uniform) |
-| pulse1 level vs reference | 1.49x | 1.39x |
-| spectral balance (all bands) | non-uniform | uniform |
-
-The residual is a constant ~2.5 dB gain offset (a headroom choice) with
-matching harmonic structure; the note envelopes now decay at the hardware rate
-(verified by a test that pins the 0.688 s decay of a divider-10 envelope).
-
-### Frame pacing
-
-Mappy's game logic is vblank-driven: one frame of game time is one NMI, which
-is exactly one 341×262-dot PPU frame. The player therefore advances the machine
-by **whole frames, paced against the wall clock, at the console's own rate —
-60.0988 Hz NTSC** — and never by "however fast the host can run the
-translations". Emulation throughput and game speed are decoupled: the engine
-manages ~850 frames/s, and the game still runs at 60.
-
-* `--fps N` overrides the lock (e.g. `--fps 60`).
-* `--stats` prints the measured rate once per second, the audio queue depth,
-  and whether the loop had to catch up.
-* Up to 3 frames are caught up after a short stall; a longer stall (window
-  drag, suspend) re-bases the clock instead of fast-forwarding the game. This
-  also means the game *cannot* run slow on a busy machine — it simply drops
-  the missed frames.
-* Audio is synthesised at the output device's real sample rate (queried from
-  cpal), so nothing needs resampling and the pitch/tempo stay correct. Audio
-  pushes never block the game loop: if the sink stalls, samples are dropped
-  rather than freezing the game.
+## Regenerating the translation
 
 ```sh
-mappy play --stats          # verify the lock on your machine
-mappy bench                 # raw engine throughput, unthrottled
-```
+source toolchain.env    # or nix develop
 
-Performance of the translations themselves: the decompiled engine runs at
-about **850–900 frames per second** (~15× real time) on one core, including
-full PPU rendering and APU synthesis. `headless`, `trace`, `diff` and `bench`
-are deliberately unthrottled so analysis runs as fast as possible.
-
-On the LG webOS TV build the same lock runs inside SDL2: on the tested webOS
-6.5.3 set (ARMv7, ~1 GHz) the engine costs ~11 ms and presentation ~5 ms per
-frame, so the game holds **60.0 fps**. The ARM engine's 600-frame video/audio
-hash is identical to the x86_64 build's; CI builds it, runs it under qemu and
-fails on any difference.
-
-## Layout
-
-```
-crates/mos6502/      6502 core: opcode matrix, interpreter, disassembler, tests
-crates/nes/          PPU, APU, cartridge, bus, controller; no platform deps
-crates/decompiler/   ROM analysis, listing writer, Rust code generator
-crates/mappy-rom/    generated Rust + embedded cartridge data + engine glue
-crates/mappy-player/ frontend: winit window, cpal audio, headless/debug tools
-crates/mappy-web/    WebAssembly build: C ABI export surface, no bindgen
-crates/mappy-native/ no_std C ABI used by the native webOS TV build
-web/                 the browser frontend served by GitHub Pages
-webos/               native SDL2 frontend, appinfo, icons, IPK inputs
-demo/mappy-music.wav  the soundtrack as rendered by this project
-screenshots/           title, READY and gameplay frames (identical to the reference)
-disassembly/mappy.asm  annotated disassembly (6.4 k lines)
-symbols.txt            names for the routines that have been identified
-docs/DECOMPILATION.md  what the original program does, routine by routine
-tools/                 opcode generator, emulator comparisons, webOS IPK builder, test fetch
-```
-
-## Regenerating the decompilation
-
-```sh
-source toolchain.env   # or: nix develop
-
-# Optional: record which addresses execute during a play session, which
-# recovers code reachable only through the game's computed jumps.
+# Optional: record which addresses execute during a play session, to recover
+# code reached only through the game's computed jumps.
 cargo run --release -p mappy-player -- trace --frames 4000 \
     --input "START@19-21,RIGHT@60-400,LEFT@410-700,A@740-760" --out /tmp/cov.txt
 
@@ -422,56 +267,21 @@ cargo run --release -p decompiler -- rom/mappy.nes \
     --coverage /tmp/cov.txt
 ```
 
-Without `--coverage` the analysis only follows the entry points the 6502 can
-reach statically (16 vectors/branches/JSRs and their targets), which finds
-1 575 of the 9 878 code bytes: Mappy reaches a lot of its code through
-computed jumps. The translated Rust does not depend on that analysis — it
-covers all 16 384 offsets either way — but the listing does, which is why the
-trace step exists.
-
-## Cross-platform notes
-
-`mos6502`, `nes`, `mappy-rom` and `decompiler` contain no platform-specific
-code: no threads, no I/O, no graphics APIs. Only `mappy-player` touches the
-outside world, through `winit` (window + keyboard, X11/Wayland/macOS/Windows)
-and `cpal` (audio, optional feature). The webOS TV build takes the same engine
-through `crates/mappy-native` (no libstd, no allocator dependency of its own)
-and `webos/main.c` (SDL2 video/input, PulseAudio via SDL). A headless build is
-one command:
-
-```sh
-cargo run --release -p mappy-player --no-default-features -- headless
-```
-
-The generated code uses only stable Rust (`edition 2021`) and is portable by
-construction.
-
-## Known differences from a real console
-
-* The PPU is dot-accurate for the background pipeline, sprites, sprite-0 hit,
-  the odd-frame dot skip and $2005/$2006/$2007 behaviour, but it does not model
-  the bus-conflict artifacts of rendering-time VRAM access, sprite overflow
-  evaluation order, or the power-on palette state.
-* APU mixing uses the documented non-linear curve but is not a die-accurate
-  DAC model; DMC DMA cycle stealing is not modelled.
-* `$4017` IRQ timing, PAL timing and expansion audio are out of scope.
-
-None of these are exercised by Mappy beyond what is implemented; the
-FCEUX comparison above is the evidence.
+Static analysis alone finds 1,575 of the 9,878 code bytes, because Mappy reaches
+much of its code through `JMP ($001E)` and `JMP ($00F6)`. The coverage file
+improves the listing only; the translation covers all 16,384 offsets either way.
 
 ## Licensing
 
-The 6502 core, the NES hardware model, the decompiler, the frontend and the
-tooling are original work, dual-licensed MIT OR Apache-2.0 — see `LICENSE-MIT`
-and `LICENSE-APACHE`.
+The 6502 core, the hardware model, the translator, the frontends and the tools
+are original work under MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`).
 
-**Mappy is © 1983, 1984 Namco Ltd.**, all rights reserved. Everything derived
-from the cartridge — `crates/mappy-rom/data/{prg,chr}.bin`,
+Mappy is © 1983, 1984 Namco Ltd., all rights reserved. Everything derived from
+the cartridge is excluded from that grant: `crates/mappy-rom/data/{prg,chr}.bin`,
 `crates/mappy-rom/src/generated.rs`, `disassembly/mappy.asm`,
-`demo/mappy-music.wav` and the screenshots — is included so the project runs
-and can be studied, and is **not** covered by that license. Treat it as personal
-use material, like any other decompilation project: bring your own cartridge
-image, keep it non-commercial, and see `NOTICE` for the exact split.
+`demo/mappy-music.wav` and `screenshots/`. It is included so the project builds
+and can be studied. Treat it as personal use material, like any other
+ROM-hacking project, and see `NOTICE` for the split.
 
-The 6502 conformance suite by Klaus Dormann is GPL; it is fetched by
-`tools/fetch_tests.sh` and never vendored here.
+Klaus Dormann's conformance suite is GPL. `tools/fetch_tests.sh` fetches it; no
+vendored file depends on it.
