@@ -1,11 +1,10 @@
 //! 6502 -> Rust code generation.
 //!
-//! Every PRG byte offset gets its own Rust function. A function decodes just
-//! one instruction, performs its side effects through the machine handle, and
-//! sets `machine.cpu.pc` to wherever execution continues. A function-pointer
-//! table indexed by `pc & 0x3FFF` is the dispatch mechanism, which mirrors how
-//! the 6502 fetches its next opcode — but as direct calls between compiled
-//! Rust functions instead of a byte-code interpreter loop.
+//! Every PRG byte offset gets its own Rust function. A function performs one
+//! instruction through the machine handle and sets `machine.cpu.pc` to wherever
+//! execution continues. A function-pointer table indexed by `pc & 0x3FFF` then
+//! selects the next function: the opcode fetch, decided ahead of time. The
+//! emulated CPU state, the 6502 stack and the cycle counts stay as they were.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -39,10 +38,10 @@ impl<'a> CodeGen<'a> {
 //!
 //! The 6502 program of Mappy, translated to Rust.
 //!
-//! One function per PRG byte offset; each executes a single 6502 instruction
-//! against [`Machine`] and branches to the address that follows. Control flow
-//! is therefore expressed as Rust calls: the `DISPATCH` table at the bottom is
-//! indexed by the program counter, exactly like the CPU's own opcode fetch.
+//! One function per PRG byte offset; each performs one 6502 instruction against
+//! [`Machine`] and leaves the program counter at the next instruction. The
+//! `DISPATCH` table at the bottom, indexed by PC, then selects the function to
+//! run, which is the translated form of the opcode fetch.
 
 #![allow(clippy::all, unused)]
 #![allow(clippy::too_many_arguments, clippy::needless_return)]

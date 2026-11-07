@@ -2,10 +2,10 @@
 //!
 //! The 6502 program of Mappy, translated to Rust.
 //!
-//! One function per PRG byte offset; each executes a single 6502 instruction
-//! against [`Machine`] and branches to the address that follows. Control flow
-//! is therefore expressed as Rust calls: the `DISPATCH` table at the bottom is
-//! indexed by the program counter, exactly like the CPU's own opcode fetch.
+//! One function per PRG byte offset; each performs one 6502 instruction against
+//! [`Machine`] and leaves the program counter at the next instruction. The
+//! `DISPATCH` table at the bottom, indexed by PC, then selects the function to
+//! run, which is the translated form of the opcode fetch.
 
 #![allow(clippy::all, unused)]
 #![allow(clippy::too_many_arguments, clippy::needless_return)]
