@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mappy — decompiled to Rust, running in WebAssembly</title>
+<title>Mappy — recompiled from 6502 to Rust, running in WebAssembly</title>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23c82800'/><rect x='3' y='5' width='4' height='6' fill='%23fcfcfc'/><rect x='9' y='5' width='4' height='6' fill='%23fcfcfc'/></svg>">
 </head>
@@ -12,8 +12,8 @@
   <header>
     <h1>Mappy</h1>
     <p class="sub">
-      The 1984 NES cartridge decompiled into Rust — 16&nbsp;384 generated
-      functions, no emulator loop — compiled to WebAssembly.
+      The 1984 NES cartridge statically recompiled into Rust and compiled to
+      WebAssembly. 16&nbsp;384 generated functions run on a Rust model of the NES.
       <a href="https://github.com/gmaxpwnage/mappy-rust">Source &amp; notes</a>
     </p>
   </header>
@@ -51,7 +51,7 @@
     <p>
       Mappy is © 1983, 1984 Namco Ltd. This page is a technical demonstration
       for personal, non-commercial use; the cartridge data is included only so
-      the decompiled program can run. See the
+      the translated program can run. See the
       <a href="https://github.com/gmaxpwnage/mappy-rust/blob/main/NOTICE">NOTICE</a>.
     </p>
     <p id="status">Loading WebAssembly…</p>

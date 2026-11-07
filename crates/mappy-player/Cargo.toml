@@ -1,6 +1,6 @@
 [package]
 name = "mappy-player"
-description = "Frontend for the decompiled Mappy: windowed player, headless runner, differential test"
+description = "Frontend for the recompiled Mappy: windowed player, headless runner, differential test"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

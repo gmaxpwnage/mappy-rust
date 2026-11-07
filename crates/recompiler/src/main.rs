@@ -1,7 +1,7 @@
-//! `decompiler` — turn the Mappy iNES image into Rust source and a listing.
+//! `recompiler` — turn the Mappy iNES image into Rust source and a listing.
 //!
 //! Usage:
-//!   decompiler <rom.nes> [--asm out.asm] [--rust out.rs] [--symbols file] [--stats]
+//!   recompiler <rom.nes> [--asm out.asm] [--rust out.rs] [--symbols file] [--stats]
 //!
 //! Paths are interpreted relative to the current directory.
 
@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help") {
-        println!("usage: decompiler <rom.nes> [--asm PATH] [--rust PATH] [--symbols PATH] [--data-dir DIR] [--coverage FILE] [--stats]");
+        println!("usage: recompiler <rom.nes> [--asm PATH] [--rust PATH] [--symbols PATH] [--data-dir DIR] [--coverage FILE] [--stats]");
         std::process::exit(if args.is_empty() { 2 } else { 0 });
     }
     let rom_path = PathBuf::from(&args[0]);
@@ -66,7 +66,7 @@ fn main() {
         cart.mirroring
     );
     if cart.prg.len() != analysis::PRG_SIZE {
-        fail("this decompiler targets the 16 KiB NROM image of Mappy");
+        fail("this recompiler targets the 16 KiB NROM image of Mappy");
     }
 
     let dynamic: Vec<u16> = match &coverage {

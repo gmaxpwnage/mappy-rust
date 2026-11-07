@@ -1,9 +1,9 @@
-//! The proof obligation of a decompilation: the generated Rust must behave
+//! The proof obligation of a translation: the generated Rust must behave
 //! exactly like the original 6502 program.
 //!
 //! Two engines run the same ROM from the same power-on state — the reference
 //! 6502 interpreter in `mos6502` and the Rust code generated from the ROM by
-//! `decompiler` — and are compared instruction by instruction. Any difference
+//! `recompiler` — and are compared instruction by instruction. Any difference
 //! in registers, cycle count, RAM, PPU state or framebuffer fails the test.
 
 use nes::{button, Cart, Machine};
@@ -33,22 +33,22 @@ fn pad(frame: u32) -> u8 {
 }
 
 #[test]
-fn decompiled_matches_interpreter() {
+fn translated_matches_interpreter() {
     let cart = Cart::from_image(mappy_rom::PRG.to_vec(), mappy_rom::CHR.to_vec());
     let mut reference = Machine::new(cart);
-    let mut decompiled = mappy_rom::Mappy::new();
+    let mut translated = mappy_rom::Mappy::new();
 
     const FRAMES: u32 = 260;
     for frame in 0..FRAMES {
         let buttons = pad(frame);
         reference.pad1 = buttons;
-        decompiled.set_pad1(buttons);
+        translated.set_pad1(buttons);
 
         let target = reference.ppu.frame + 1;
         let mut guard = 0u64;
         while reference.ppu.frame < target {
             reference.step_interpreter();
-            decompiled.step();
+            translated.step();
             assert_eq!(
                 (
                     reference.cpu.pc,
@@ -60,13 +60,13 @@ fn decompiled_matches_interpreter() {
                     reference.cpu.cycles
                 ),
                 (
-                    decompiled.machine.cpu.pc,
-                    decompiled.machine.cpu.a,
-                    decompiled.machine.cpu.x,
-                    decompiled.machine.cpu.y,
-                    decompiled.machine.cpu.sp,
-                    decompiled.machine.cpu.p,
-                    decompiled.machine.cpu.cycles
+                    translated.machine.cpu.pc,
+                    translated.machine.cpu.a,
+                    translated.machine.cpu.x,
+                    translated.machine.cpu.y,
+                    translated.machine.cpu.sp,
+                    translated.machine.cpu.p,
+                    translated.machine.cpu.cycles
                 ),
                 "CPU state diverged at frame {frame}"
             );
@@ -74,25 +74,25 @@ fn decompiled_matches_interpreter() {
             assert!(guard < 10_000_000, "frame {frame} never completed");
         }
 
-        assert_eq!(reference.ram, decompiled.machine.ram, "RAM differs at frame {frame}");
+        assert_eq!(reference.ram, translated.machine.ram, "RAM differs at frame {frame}");
         assert_eq!(
-            reference.ppu.v, decompiled.machine.ppu.v,
+            reference.ppu.v, translated.machine.ppu.v,
             "PPU scroll v differs at frame {frame}"
         );
         assert_eq!(
-            reference.ppu.nametables, decompiled.machine.ppu.nametables,
+            reference.ppu.nametables, translated.machine.ppu.nametables,
             "nametables differ at frame {frame}"
         );
         assert_eq!(
-            reference.ppu.pixels, decompiled.machine.ppu.pixels,
+            reference.ppu.pixels, translated.machine.ppu.pixels,
             "framebuffer differs at frame {frame}"
         );
     }
 
     // The game must actually be in play by now, not stuck on the title screen.
     assert_eq!(
-        decompiled.machine.ram[0x040F], 2,
+        translated.machine.ram[0x040F], 2,
         "expected the game to have started (input-enable flag at $040F)"
     );
-    assert!(decompiled.machine.cpu.cycles > 5_000_000);
+    assert!(translated.machine.cpu.cycles > 5_000_000);
 }

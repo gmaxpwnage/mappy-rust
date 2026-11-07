@@ -1,4 +1,4 @@
-//! A 6502 disassembler, used by the decompiler and its listings.
+//! A 6502 disassembler, used by the recompiler and its listings.
 
 use alloc::format;
 use alloc::string::{String, ToString};

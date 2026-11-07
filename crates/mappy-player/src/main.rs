@@ -1,10 +1,10 @@
-//! `mappy` — the frontend for the decompiled game.
+//! `mappy` — the frontend for the translated game.
 //!
 //! Commands:
 //!   play                     open a window and play (needs the `gui` feature)
 //!   headless                 run and dump PNG frames / audio, no window
 //!   trace                    record executed program counters (coverage)
-//!   diff                     run interpreter vs decompiled Rust in lockstep
+//!   diff                     run interpreter vs translated Rust in lockstep
 //!   ram                      dump RAM after running
 
 mod diff;
@@ -56,7 +56,7 @@ fn main() {
 
 fn usage() {
     println!(
-        "mappy — the decompiled Mappy
+        "mappy — the recompiled Mappy
 
 USAGE:
     mappy play      [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
@@ -69,7 +69,7 @@ USAGE:
     mappy ram       [--frames N] [--every N] [--at ADDR:COUNT] [--input SCRIPT]
     mappy bench     [--frames N]
 
-`play` runs the decompiled game and needs no ROM file: the cartridge data is
+`play` runs the translated game and needs no ROM file: the cartridge data is
 compiled into the binary. Its game loop is locked to the console's frame rate
 (60.0988 fps NTSC, override with --fps) and is paced against the wall clock, so
 game speed never depends on how fast the host is. --stats prints the measured
@@ -96,7 +96,7 @@ struct Opts {
     max_lines: usize,
     watch_ram: Option<u16>,
     region: Option<(u32, u32, u32, u32)>,
-    decompiled: bool,
+    translated: bool,
     /// Write the final frame's NES palette indices (256x240 bytes).
     dump_indices: bool,
     /// True when `--rom` was given explicitly.
@@ -122,7 +122,7 @@ impl Opts {
             max_lines: 400,
             watch_ram: None,
             region: None,
-            decompiled: true,
+            translated: true,
             dump_indices: false,
             rom_given: false,
             fps: 60.0988,
@@ -206,7 +206,7 @@ impl Opts {
                 }
                 "--engine" => {
                     let v = need(i);
-                    o.decompiled = v != "interpreter" && v != "ref";
+                    o.translated = v != "interpreter" && v != "ref";
                     i += 2;
                 }
                 "--region" => {
@@ -243,10 +243,10 @@ impl Opts {
         })
     }
 
-    /// The decompiled engine is a static translation of the embedded cartridge
-    /// image, so a different `--rom` can only be run through the interpreter.
+    /// The translated engine runs the embedded cartridge image, so a different
+    /// `--rom` can only run through the interpreter.
     fn use_interpreter(&self) -> bool {
-        !self.decompiled || self.rom_given
+        !self.translated || self.rom_given
     }
 
     fn script(&self) -> InputScript {
@@ -260,7 +260,7 @@ impl Opts {
 fn headless(o: &mut Opts) {
     std::fs::create_dir_all(&o.outdir).ok();
     let mut game = mappy_rom::Mappy::new();
-    // The decompiled engine carries its own cartridge image, so a ROM file is
+    // The translated engine carries its own cartridge image, so a ROM file is
     // only needed when the reference interpreter is selected.
     let mut m = if o.use_interpreter() {
         let rom = o.rom();
@@ -271,15 +271,15 @@ fn headless(o: &mut Opts) {
     };
     let script = o.script();
     let started = std::time::Instant::now();
-    let decompiled = !o.use_interpreter();
-    if o.decompiled && o.rom_given {
+    let translated = !o.use_interpreter();
+    if o.translated && o.rom_given {
         eprintln!(
-            "note: the decompiled engine runs the embedded cartridge image; \
+            "note: the translated engine runs the embedded cartridge image; \
              --rom selects the interpreter engine"
         );
     }
     for f in 0..o.frames {
-        if decompiled {
+        if translated {
             game.set_pad1(script.at(f));
             game.run_frame();
         } else {
@@ -288,14 +288,14 @@ fn headless(o: &mut Opts) {
             m.run_frame_interpreter();
         }
         if f % o.every == 0 || f + 1 == o.frames {
-            let fb = if decompiled {
+            let fb = if translated {
                 game.rgb()
             } else {
                 m.as_ref().expect("interpreter machine").framebuffer_rgb()
             };
             let path = format!("{}/frame_{f:04}.png", o.outdir.display());
             png::write_nes_frame(&path, &fb).unwrap();
-            let pc = if decompiled {
+            let pc = if translated {
                 game.machine.cpu.pc
             } else {
                 m.as_ref().expect("interpreter machine").cpu.pc
@@ -304,7 +304,7 @@ fn headless(o: &mut Opts) {
         }
     }
     if o.dump_indices {
-        let ppu = if decompiled {
+        let ppu = if translated {
             &game.machine.ppu
         } else {
             &m.as_ref().expect("interpreter machine").ppu
@@ -323,7 +323,7 @@ fn headless(o: &mut Opts) {
         println!("wrote framebuffer indices, nametables, palette RAM and OAM to {:?}", o.outdir);
     }
     let elapsed = started.elapsed().as_secs_f64();
-    let total = if decompiled {
+    let total = if translated {
         game.machine.total_cycles
     } else {
         m.as_ref().expect("interpreter machine").total_cycles
@@ -334,22 +334,22 @@ fn headless(o: &mut Opts) {
         total as f64 / o.frames as f64,
         3.0 * total as f64 / o.frames as f64
     );
-    if decompiled {
+    if translated {
         println!(
-            "{} frames in {:.3}s = {:.0} fps (decompiled engine, single thread)",
+            "{} frames in {:.3}s = {:.0} fps (translated engine, single thread)",
             o.frames,
             elapsed,
             o.frames as f64 / elapsed
         );
     }
-    let samples = if decompiled {
+    let samples = if translated {
         game.take_audio()
     } else {
         m.as_mut().expect("interpreter machine").apu.drain_samples()
     };
     if !samples.is_empty() {
         let path = format!("{}/audio.wav", o.outdir.display());
-        let rate = if decompiled {
+        let rate = if translated {
             game.machine.apu.sample_rate() as u32
         } else {
             m.as_ref().expect("interpreter machine").apu.sample_rate() as u32
@@ -424,12 +424,12 @@ fn run_diff(o: &mut Opts) {
     let rom = o.rom();
     let script = o.script();
     match diff::run(&rom, o.frames, &script, true) {
-        Ok(frames) => println!("OK: {frames} frames, interpreter and decompiled Rust agree exactly"),
+        Ok(frames) => println!("OK: {frames} frames, interpreter and translated Rust agree exactly"),
         Err(d) => {
             println!("DIVERGENCE at frame {}", d.frame);
             println!("  state: {}", d.what);
             println!("  interpreter: {}", d.interp);
-            println!("  decompiled:  {}", d.decomp);
+            println!("  translated:  {}", d.translated);
             if !d.history.is_empty() {
                 println!("  recent instructions (interpreter):");
                 for h in d.history {
@@ -536,7 +536,7 @@ fn apu_dump(o: &mut Opts) {
     println!();
 }
 
-/// Throughput measurement: frames per second of the decompiled engine.
+/// Throughput measurement: frames per second of the translated engine.
 fn bench(o: &mut Opts) {
     let frames = if o.frames == 600 { 1800 } else { o.frames };
     let mut game = mappy_rom::Mappy::new();

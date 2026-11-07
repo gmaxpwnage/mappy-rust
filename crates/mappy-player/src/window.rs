@@ -257,7 +257,7 @@ impl ApplicationHandler for App {
             return;
         }
         let attrs = Window::default_attributes()
-            .with_title("Mappy — decompiled to Rust")
+            .with_title("Mappy — recompiled from 6502 to Rust")
             .with_inner_size(winit::dpi::LogicalSize::new(
                 (NES_W * self.scale) as u32,
                 (NES_H * self.scale) as u32,

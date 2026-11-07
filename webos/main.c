@@ -1,7 +1,7 @@
 /*
  * Mappy for webOS TV — native SDL2 frontend.
  *
- * The game itself is the same decompiled Rust machine as the desktop and wasm
+ * The game itself is the same recompiled Rust engine as the desktop and wasm
  * builds; crates/mappy-native exposes it as a plain C library. This file owns
  * the window, the sound device, the 60.0988 fps clock and the Magic Remote
  * mapping:

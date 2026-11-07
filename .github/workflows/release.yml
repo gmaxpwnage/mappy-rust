@@ -63,8 +63,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config libasound2-dev libx11-dev libxkbcommon-dev libwayland-dev
 
-      - name: Build the game and the decompiler
-        run: cargo build --release --locked --target ${{ matrix.target }} -p mappy-player -p decompiler
+      - name: Build the game and the recompiler
+        run: cargo build --release --locked --target ${{ matrix.target }} -p mappy-player -p recompiler
 
       - name: Assemble the archive (Unix)
         if: runner.os != 'Windows'
@@ -78,8 +78,8 @@ jobs:
           mkdir -p "dist/$name"
           cp README.md NOTICE LICENSE-MIT LICENSE-APACHE "dist/$name/"
           cp "target/${{ matrix.target }}/release/mappy" "dist/$name/"
-          cp "target/${{ matrix.target }}/release/decompiler" "dist/$name/"
-          chmod +x "dist/$name/mappy" "dist/$name/decompiler"
+          cp "target/${{ matrix.target }}/release/recompiler" "dist/$name/"
+          chmod +x "dist/$name/mappy" "dist/$name/recompiler"
 
       - name: Assemble the archive (Windows)
         if: runner.os == 'Windows'
@@ -92,7 +92,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item README.md, NOTICE, LICENSE-MIT, LICENSE-APACHE -Destination "dist/$name"
           Copy-Item "target/${{ matrix.target }}/release/mappy.exe" -Destination "dist/$name"
-          Copy-Item "target/${{ matrix.target }}/release/decompiler.exe" -Destination "dist/$name"
+          Copy-Item "target/${{ matrix.target }}/release/recompiler.exe" -Destination "dist/$name"
 
       - name: Create tar.gz
         if: matrix.archive == 'tar.gz'

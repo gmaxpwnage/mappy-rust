@@ -14,7 +14,7 @@ pub fn listing(a: &Analysis, symbols: &BTreeMap<u16, String>) -> String {
         "; ============================================================================
 ; Mappy (Japan) (En) - NROM (mapper 0), 16 KiB PRG, 8 KiB CHR, vertical mirroring
 ;
-; Annotated disassembly produced by `decompiler` from the iNES image.
+; Annotated disassembly produced by `recompiler` from the iNES image.
 ; The code is executed from the $C000-$FFFF mirror; all addresses below are
 ; CPU addresses in that window. `phys` offsets are shown in the header table.
 ;

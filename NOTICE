@@ -1,4 +1,4 @@
-Mappy decompiled to Rust
+Mappy recompiled from 6502 to Rust
 Copyright (c) 2026 Max Power
 
 This project contains two kinds of material.
@@ -8,7 +8,7 @@ This project contains two kinds of material.
 
      crates/mos6502/      6502 core, opcode table, disassembler
      crates/nes/          PPU, APU, cartridge and bus models
-     crates/decompiler/   static analysis, listing writer, Rust code generator
+     crates/recompiler/   static analysis, listing writer, Rust code generator
      crates/mappy-player/ window/audio frontend and analysis tools
      tools/               generators and reference-emulator comparison scripts
      docs/, README.md

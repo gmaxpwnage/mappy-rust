@@ -8,5 +8,5 @@
   "icon": "icon.png",
   "largeIcon": "icon_large.png",
   "splashBackground": "splash.png",
-  "appDescription": "Namco's 1984 arcade classic, decompiled from the NES cartridge into Rust and running natively on webOS TV. Magic Remote: left/right move, OK jumps, Up starts."
+  "appDescription": "Namco's 1984 arcade classic, recompiled from the NES cartridge into Rust and running natively on webOS TV. Magic Remote: left/right move, OK jumps, Up starts."
 }

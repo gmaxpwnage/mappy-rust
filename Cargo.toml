@@ -4,14 +4,14 @@ members = [
     "crates/mos6502",
     "crates/nes",
     "crates/mappy-rom",
-    "crates/decompiler",
+    "crates/recompiler",
     "crates/mappy-player",
     "crates/mappy-web",
     "crates/mappy-native",
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.70"
@@ -22,6 +22,6 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 
-# The decompiled ROM is ~16k tiny functions; keep debug builds usable.
+# The translated ROM is ~16k tiny functions; keep debug builds usable.
 [profile.dev]
 opt-level = 1

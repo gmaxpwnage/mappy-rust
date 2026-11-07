@@ -1,4 +1,4 @@
-//! WebAssembly frontend for the decompiled game.
+//! WebAssembly frontend for the translated game.
 //!
 //! The module exports a handful of `extern "C"` functions and nothing else, so
 //! the page needs no bindgen glue, no bundler and no JS framework: the driver

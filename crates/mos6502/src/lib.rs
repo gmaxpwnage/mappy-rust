@@ -1,6 +1,6 @@
 //! A cycle-counted NMOS 6502 CPU: the reference interpreter.
 //!
-//! This crate serves two purposes in the `mappy` decompilation project:
+//! This crate serves two purposes in the `mappy` recompilation project:
 //!
 //! 1. It is the **specification** of 6502 semantics (see the `adc_val`,
 //!    `sbc_val`, ... helpers, which the generated Rust uses as well), and
@@ -8,7 +8,7 @@
 //!    transpiled Rust code in `mappy-rom` behaves exactly like the ROM.
 //!
 //! The game itself does *not* run through this interpreter; it runs through
-//! machine code that `decompiler` translated to Rust source.
+//! machine code that `recompiler` translated to Rust source.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -39,7 +39,7 @@ pub trait Bus {
 // Semantics helpers.
 //
 // The generated Rust in `mappy-rom` calls these too, so a fix here fixes both
-// the interpreter and the decompiled program at once.
+// the interpreter and the translated program at once.
 // ---------------------------------------------------------------------------
 
 /// `ADC`: returns (result, carry out, overflow).

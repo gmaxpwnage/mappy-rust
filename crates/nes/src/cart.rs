@@ -40,7 +40,7 @@ pub struct Cart {
 }
 
 impl Cart {
-    /// Build an NROM cartridge from raw PRG/CHR data (used by the decompiled
+    /// Build an NROM cartridge from raw PRG/CHR data (used by the translated
     /// game, which embeds its own data).
     pub fn from_image(prg: Vec<u8>, chr: Vec<u8>) -> Cart {
         let chr_is_ram = chr.is_empty();

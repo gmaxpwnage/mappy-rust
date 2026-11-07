@@ -2,7 +2,7 @@
 ;
 ; Format: `<address> <name>` — `;` starts a comment.
 ; Addresses are CPU addresses in the $C000 mirror, which is the mirror the
-; ROM's own vectors point into. The decompiler uses these names for both the
+; ROM's own vectors point into. The recompiler uses these names for both the
 ; annotated listing and the generated Rust function names.
 ;
 ; Only routines whose behaviour has been confirmed by reading the code (and,

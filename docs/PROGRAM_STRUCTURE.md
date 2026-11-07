@@ -1,7 +1,7 @@
 # What the original program does
 
 Notes from reading the 6502 code of *Mappy (Japan) (En)*, as recovered by
-`decompiler` (see `disassembly/mappy.asm`) and confirmed by tracing execution.
+`recompiler` (see `disassembly/mappy.asm`) and confirmed by tracing execution.
 Addresses are CPU addresses in the `$C000-$FFFF` mirror, which is where the
 ROM's own vectors point; the cartridge is NROM-128, so that mirror is the same
 16 KiB as `$8000-$BFFF`.
@@ -22,7 +22,7 @@ reset entry point follows immediately at `$C031`.
 
 ## Code vs data
 
-`decompiler` statically follows control flow from the three vectors. That finds
+`recompiler` statically follows control flow from the three vectors. That finds
 1 575 bytes of code. A traced play session (4 000 frames, `mappy trace`) shows
 3 757 distinct program counters and, combined with the static sweep, accounts
 for **9 878 of the 16 384 PRG bytes as code** (4 869 instructions). The
@@ -37,7 +37,7 @@ mechanisms are used:
 * `JMP ($00F6)` — a second indirect jump, used by the sound engine.
 
 Because the translated Rust covers *every* byte offset, this does not affect
-the decompiled game; it only affects how much of the listing can be classified
+the translated game; it only affects how much of the listing can be classified
 statically.
 
 ## Boot sequence

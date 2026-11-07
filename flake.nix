@@ -1,5 +1,5 @@
 {
-  description = "Mappy (NES) decompiled from 6502 to Rust";
+  description = "Mappy (NES) statically recompiled from 6502 to Rust";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -36,7 +36,7 @@
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = runtimeLibs pkgs;
           # The workspace has several binaries; the game is the interesting one.
-          cargoBuildFlags = [ "-p" "mappy-player" "-p" "decompiler" ];
+          cargoBuildFlags = [ "-p" "mappy-player" "-p" "recompiler" ];
           doCheck = false; # the 6502 conformance suite is fetched separately
         };
         default = self.packages.${pkgs.system}.mappy;

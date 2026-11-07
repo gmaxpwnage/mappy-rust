@@ -1,6 +1,6 @@
 //! The machine: CPU + bus + PPU + APU + cartridge.
 //!
-//! `Machine` is the single mutable object that decompiled code operates on.
+//! `Machine` is the single mutable object that translated code operates on.
 //! The generated Rust in `mappy-rom` calls [`Machine::read_byte`],
 //! [`Machine::write_byte`] and touches `machine.cpu.*` directly, exactly like
 //! the original 6502 code touched memory-mapped registers.
@@ -88,13 +88,13 @@ impl Machine {
         self.total_cycles = 0;
     }
 
-    /// Memory read on behalf of the CPU (the decompiled program calls this).
+    /// Memory read on behalf of the CPU (the translated program calls this).
     #[inline(always)]
     pub fn read_byte(&mut self, addr: u16) -> u8 {
         Bus::read(self, addr)
     }
 
-    /// Memory write on behalf of the CPU (the decompiled program calls this).
+    /// Memory write on behalf of the CPU (the translated program calls this).
     #[inline(always)]
     pub fn write_byte(&mut self, addr: u16, val: u8) {
         Bus::write(self, addr, val)
@@ -108,7 +108,7 @@ impl Machine {
         (hi << 8) | lo
     }
 
-    /// Push/pull helpers used by the decompiled stack instructions.
+    /// Push/pull helpers used by the translated stack instructions.
     #[inline(always)]
     pub fn push(&mut self, v: u8) {
         self.write_byte(0x0100 | self.cpu.sp as u16, v);
@@ -155,12 +155,12 @@ impl Machine {
     }
 
     /// Execute one instruction with the reference interpreter *without*
-    /// advancing the PPU/APU. Used as a fallback by the decompiled program,
+    /// advancing the PPU/APU. Used as a fallback by the translated program,
     /// which dispatches through generated Rust instead.
     pub fn step_cpu_only(&mut self) -> u32 {
         let start = self.cpu.cycles;
         let mut cpu = self.cpu;
-        // Taking an interrupt *is* the step, exactly as the decompiled engine
+        // Taking an interrupt *is* the step, exactly as the translated engine
         // does it: the handler's first instruction runs on the next step.
         if !cpu.take_interrupts(self) {
             cpu.step(self);

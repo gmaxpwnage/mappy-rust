@@ -389,7 +389,7 @@ def homebrew_repo(out_dir: Path, ipk: Path, version: str, base_url: str, sha: st
                 "id": APP_ID,
                 "title": APP_TITLE,
                 "shortDescription": (
-                    "Namco's 1984 arcade classic, decompiled to Rust. Native webOS TV build."
+                    "Namco's 1984 arcade classic, recompiled to Rust. Native webOS TV build."
                 )[:80],
                 "iconUri": f"{base}/icon160.png",
                 "detailIconUri": f"{base}/icon320.png",

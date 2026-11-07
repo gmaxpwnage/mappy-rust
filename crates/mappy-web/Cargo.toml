@@ -1,6 +1,6 @@
 [package]
 name = "mappy-web"
-description = "WebAssembly build of the decompiled game (no framework, C ABI only)"
+description = "WebAssembly build of the translated game (no framework, C ABI only)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

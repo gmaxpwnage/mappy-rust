@@ -1,4 +1,4 @@
-//! Differential test: the reference interpreter against the decompiled Rust.
+//! Differential test: the reference interpreter against the translated Rust.
 //!
 //! Both engines run the same ROM, driven by the same scripted input, and every
 //! observable piece of state (registers, RAM, PPU registers, framebuffer, APU
@@ -13,7 +13,7 @@ pub struct Divergence {
     pub frame: u32,
     pub what: String,
     pub interp: String,
-    pub decomp: String,
+    pub translated: String,
     pub history: Vec<String>,
 }
 
@@ -52,17 +52,17 @@ pub fn run(
         frame: 0,
         what: "rom".into(),
         interp: e.clone(),
-        decomp: e,
+        translated: e,
         history: vec![],
     })?;
     let mut interp = Machine::new(cart);
-    let mut decomp = mappy_rom::Mappy::new();
+    let mut translated = mappy_rom::Mappy::new();
     let mut hist = History::new(48);
 
     for f in 0..frames {
         let pad = script.at(f);
         interp.pad1 = pad;
-        decomp.machine.pad1 = pad;
+        translated.machine.pad1 = pad;
 
         let target = interp.ppu.frame + 1;
         let mut guard = 0u64;
@@ -73,8 +73,8 @@ pub fn run(
                 interp.cpu.sp, interp.cpu.p
             ));
             interp.step_interpreter();
-            decomp.step();
-            if let Some(d) = compare_instruction(f, &interp, &decomp.machine) {
+            translated.step();
+            if let Some(d) = compare_instruction(f, &interp, &translated.machine) {
                 return Err(Divergence { history: hist.dump(), ..d });
             }
             guard += 1;
@@ -82,7 +82,7 @@ pub fn run(
                 break;
             }
         }
-        if let Some(d) = compare(f, &interp, &decomp.machine) {
+        if let Some(d) = compare(f, &interp, &translated.machine) {
             return Err(Divergence { history: hist.dump(), ..d });
         }
         if verbose && (f % 60 == 0 || f + 1 == frames) {
@@ -111,7 +111,7 @@ fn compare_instruction(frame: u32, a: &Machine, b: &Machine) -> Option<Divergenc
                 "pc={:04X} a={:02X} x={:02X} y={:02X} sp={:02X} p={:02X} cyc={}",
                 a.cpu.pc, a.cpu.a, a.cpu.x, a.cpu.y, a.cpu.sp, a.cpu.p, a.cpu.cycles
             ),
-            decomp: format!(
+            translated: format!(
                 "pc={:04X} a={:02X} x={:02X} y={:02X} sp={:02X} p={:02X} cyc={}",
                 b.cpu.pc, b.cpu.a, b.cpu.x, b.cpu.y, b.cpu.sp, b.cpu.p, b.cpu.cycles
             ),
@@ -126,7 +126,7 @@ fn compare(frame: u32, a: &Machine, b: &Machine) -> Option<Divergence> {
         frame,
         what: what.to_string(),
         interp: x,
-        decomp: y,
+        translated: y,
         history: Vec::new(),
     };
     if a.cpu.pc != b.cpu.pc

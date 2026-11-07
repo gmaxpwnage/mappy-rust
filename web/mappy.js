@@ -1,4 +1,4 @@
-// Browser frontend for the decompiled game.
+// Browser frontend for the recompiled game.
 //
 // The wasm module exposes a tiny C ABI (see crates/mappy-web/src/lib.rs), so
 // this file is the whole "framework": it instantiates the module, paces the

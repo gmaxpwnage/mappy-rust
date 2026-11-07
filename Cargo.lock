@@ -394,14 +394,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
-name = "decompiler"
-version = "0.1.2"
-dependencies = [
- "mos6502",
- "nes",
-]
-
-[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -797,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "mappy-native"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "mappy-rom",
  "nes",
@@ -805,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "mappy-player"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "cpal",
  "mappy-rom",
@@ -817,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "mappy-rom"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "mos6502",
  "nes",
@@ -825,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "mappy-web"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "mappy-rom",
  "nes",
@@ -854,7 +846,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "mos6502"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "ndk"
@@ -911,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "nes"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "mos6502",
 ]
@@ -1397,6 +1389,14 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
+
+[[package]]
+name = "recompiler"
+version = "0.1.3"
+dependencies = [
+ "mos6502",
+ "nes",
+]
 
 [[package]]
 name = "redox_syscall"

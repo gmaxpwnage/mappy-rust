@@ -1,6 +1,6 @@
 [package]
 name = "mappy-rom"
-description = "Mappy (Japan) (En), decompiled from 6502 machine code to Rust"
+description = "Mappy (Japan) (En), statically recompiled from 6502 machine code to Rust"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

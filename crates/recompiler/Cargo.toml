@@ -1,12 +1,12 @@
 [package]
-name = "decompiler"
-description = "Static 6502 -> Rust decompiler used to build mappy-rom"
+name = "recompiler"
+description = "Static 6502 -> Rust recompiler used to build mappy-rom"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "decompiler"
+name = "recompiler"
 path = "src/main.rs"
 
 [dependencies]

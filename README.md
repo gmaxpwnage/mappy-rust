@@ -18,7 +18,7 @@ The port runs on Linux, macOS, Windows, in a browser and on LG webOS TVs.
 
 | path | role |
 | --- | --- |
-| `crates/decompiler` | reads the ROM, writes the annotated listing and the Rust translation |
+| `crates/recompiler` | reads the ROM, writes the annotated listing and the Rust translation |
 | `crates/mappy-rom` | the translated game, the embedded cartridge, the frame loop |
 | `crates/mos6502` | 6502 core: interpreter, disassembler, opcode tables |
 | `crates/nes` | PPU, APU, NROM cartridge, bus, controllers |
@@ -29,7 +29,7 @@ The port runs on Linux, macOS, Windows, in a browser and on LG webOS TVs.
 
 ## How the translation works
 
-`decompiler` decodes the PRG image and writes one Rust function for every byte
+`recompiler` decodes the PRG image and writes one Rust function for every byte
 offset in it. A function performs one 6502 instruction against the machine and
 sets the program counter to where execution continues:
 
@@ -71,14 +71,13 @@ The generated code is a translation, not a decompilation. Registers, flags, the
 stack and cycle counts are still the 6502's, and control flow still goes through
 `DISPATCH`. The machine around the code is an emulator: RAM, cartridge mapping,
 a dot-accurate PPU and a full APU. `generated.rs` will not tell you how Mappy
-works, and editing it is not how you change the game. (`crates/decompiler` keeps
-its original name, though it emits a translation.)
+works, and editing it is not how you change the game.
 
 The decompilation in the useful sense is the analysis:
 
 - `disassembly/mappy.asm`, 6,400 lines of annotated listing
 - `symbols.txt`, 21 named routines from the reset handler to the Namco sound engine
-- `docs/DECOMPILATION.md`, which walks the original program routine by routine:
+- `docs/PROGRAM_STRUCTURE.md`, which walks the original program routine by routine:
   the state dispatcher at `$C128`, the VRAM update queue at `$04C0`, the pause
   sprites, the cold-boot check
 
@@ -141,7 +140,7 @@ presentation about 5 ms per frame, which holds 60.0 fps.
 
 The [releases page](https://github.com/gmaxpwnage/mappy-rust/releases) has Linux
 (x86_64, aarch64), macOS (Apple silicon, Intel), Windows x86_64 and the webOS
-IPK. Each archive holds `mappy`, the `decompiler` binary and the licence files;
+IPK. Each archive holds `mappy`, the `recompiler` binary and the licence files;
 `SHA256SUMS.txt` covers every archive.
 
 ## Build and run
@@ -170,7 +169,7 @@ press can be missed. Press again if nothing happens; FCEUX behaves the same way.
 
 ```
 mappy play     [--scale N] [--no-audio] [--input SCRIPT] [--fps N] [--stats]
-mappy headless [--frames N] [--every N] [--outdir DIR] [--engine decompiled|interpreter]
+mappy headless [--frames N] [--every N] [--outdir DIR] [--engine translated|interpreter]
 mappy trace    [--frames N] [--pc-range LO-HI] [--watch-ram ADDR]
 mappy diff     [--frames N] [--input SCRIPT]
 mappy ram|nt|probe|bench ...
@@ -240,13 +239,13 @@ comparison is the evidence.
 ## Other paths
 
 ```
-disassembly/mappy.asm   annotated listing of the original program
-symbols.txt             names for the 21 routines identified so far
-docs/DECOMPILATION.md   routine-by-routine notes on the original program
-docs/RELEASE_NOTES.md   release notes
-demo/mappy-music.wav    the soundtrack as rendered by this project
-screenshots/            title, READY and gameplay frames
-tools/                  opcode generator, emulator comparisons, webOS IPK builder
+disassembly/mappy.asm      annotated listing of the original program
+symbols.txt                names for the 21 routines identified so far
+docs/PROGRAM_STRUCTURE.md  routine-by-routine notes on the original program
+docs/RELEASE_NOTES.md      release notes
+demo/mappy-music.wav       the soundtrack as rendered by this project
+screenshots/               title, READY and gameplay frames
+tools/                     opcode generator, emulator comparisons, webOS IPK builder
 ```
 
 ## Regenerating the translation
@@ -259,7 +258,7 @@ source toolchain.env    # or nix develop
 cargo run --release -p mappy-player -- trace --frames 4000 \
     --input "START@19-21,RIGHT@60-400,LEFT@410-700,A@740-760" --out /tmp/cov.txt
 
-cargo run --release -p decompiler -- rom/mappy.nes \
+cargo run --release -p recompiler -- rom/mappy.nes \
     --asm disassembly/mappy.asm \
     --rust crates/mappy-rom/src/generated.rs \
     --data-dir crates/mappy-rom/data \

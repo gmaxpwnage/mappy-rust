@@ -8,7 +8,7 @@
 //! * [`Mappy`] bundles the cartridge with the console hardware and provides
 //!   the frame-stepping API a frontend needs.
 //!
-//! The decompiled program drives the NES hardware model in the `nes` crate;
+//! The translated program drives the NES hardware model in the `nes` crate;
 //! it can therefore run on any platform that crate supports.
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -88,7 +88,7 @@ impl Mappy {
     }
 }
 
-/// One instruction of the decompiled program: interrupts, then the
+/// One instruction of the translated program: interrupts, then the
 /// translated instruction selected by the program counter.
 #[inline]
 pub fn step_engine(m: &mut Machine) {
