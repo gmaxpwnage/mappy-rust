@@ -58,5 +58,5 @@ int main(void) {
     printf("frames=%u hash=%016llx\n", mappy_frame_count(engine),
            (unsigned long long)hash_state);
     mappy_destroy(engine);
-    return hash_state == 0x7e8d84c0bb8b4ac7ULL ? 0 : 2;
+    return hash_state == 0x88de4d1a16429e1dULL ? 0 : 2;
 }

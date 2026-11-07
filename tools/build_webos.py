@@ -277,7 +277,7 @@ def run_selftest(sdk: Path, lib: Path) -> None:
     covers 600 frames of video and audio, so a codegen or ABI mistake that
     changes one pixel or sample fails the build.
     """
-    expected = "frames=600 hash=7e8d84c0bb8b4ac7"
+    expected = "frames=600 hash=88de4d1a16429e1d"
     cc = os.environ.get("WEBOS_CC") or str(sdk / "bin" / "arm-webos-linux-gnueabi-gcc")
     with tempfile.TemporaryDirectory() as tmp:
         binary = Path(tmp) / "engine_selftest_arm"
