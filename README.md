@@ -1,6 +1,6 @@
 # Mappy (Japan) (En), recompiled from 6502 to Rust
 
-[![CI](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml)
+[![CI](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/gmaxpwnage/mappy-rust/actions/workflows/ci.yml)    [![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/1301-mappy/)
 
 Mappy is a 1984 Namco NES cartridge: 16 KiB of 6502 code and data plus 8 KiB of
 pattern tables. This repository statically recompiles it to Rust. The PRG image
